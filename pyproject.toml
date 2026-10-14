@@ -53,8 +53,11 @@ Issues = "https://github.com/focolab/vizi-plugin-sdk/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["vizi_plugin_sdk"]
 
+# The sdist is the package and nothing else from this repository; hatchling
+# adds README.md, LICENSE and NOTICE (the readme and license-files above) and
+# pyproject.toml itself.
 [tool.hatch.build.targets.sdist]
-include = ["vizi_plugin_sdk", "proto", "README.md"]
+only-include = ["vizi_plugin_sdk"]
 
 [tool.hatch.version]
 path = "vizi_plugin_sdk/__init__.py"

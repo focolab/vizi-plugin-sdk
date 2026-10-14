@@ -1,10 +1,10 @@
-# Publish to PyPI through trusted publishing (OIDC): no token exists anywhere.
+# Publish the SDK to PyPI through trusted publishing (OIDC): no token exists
+# anywhere.
 #
-# PyPI has no name reservation; a project exists once a first release is
-# uploaded.  This workflow uploads ONLY the placeholder under
-# `pypi-placeholder/` (version 0.0.1, no code), which holds the
-# `vizi-plugin-sdk` name.  Switching it to the real package is a deliberate
-# change to the build step below, not an input.
+# Builds the package at the repository root and uploads exactly two files: the
+# wheel and the sdist of the version in `vizi_plugin_sdk/__init__.py`.  The
+# dispatch must name that version, so a run states what it uploads.  A version
+# on PyPI is permanent: it can be yanked, never replaced.
 #
 # Manual only, from master.  The PyPI side is a trusted publisher naming this
 # repository, this file's name and the `pypi` environment; all three must
@@ -19,8 +19,8 @@ name: publish
 on:
   workflow_dispatch:
     inputs:
-      confirm:
-        description: 'Type "placeholder" to upload the placeholder release'
+      version:
+        description: 'The version to upload, exactly as in vizi_plugin_sdk/__init__.py (for example 1.0a85)'
         required: true
         type: string
 
@@ -31,7 +31,7 @@ concurrency: publish
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/master' && inputs.confirm == 'placeholder'
+    if: github.ref == 'refs/heads/master'
     runs-on: ${{ fromJSON(vars.LINUX_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
@@ -39,18 +39,33 @@ jobs:
         if: runner.environment == 'github-hosted'
         with:
           python-version: '3.11'
+      - name: The dispatch names the version in the source
+        env:
+          WANT: ${{ inputs.version }}
+        run: |
+          have="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' vizi_plugin_sdk/__init__.py)"
+          echo "source version: $have; dispatched: $WANT"
+          test -n "$have"
+          test "$have" = "$WANT"
+          echo "VERSION=$have" >> "$GITHUB_ENV"
       - name: Build tool in a venv
         run: |
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/python" -m pip install --upgrade pip build
-      - name: Build the placeholder only
-        run: rm -rf dist && "$RUNNER_TEMP/venv/bin/python" -m build --outdir dist pypi-placeholder
-      - name: Refuse anything but the two placeholder files
+      - name: Build the wheel and the sdist
+        run: rm -rf dist && "$RUNNER_TEMP/venv/bin/python" -m build --outdir dist .
+      - name: Refuse anything but this version's wheel and sdist
         run: |
           ls -l dist
           test "$(ls dist | wc -l)" = 2
-          ls dist | grep -q '^vizi_plugin_sdk-0\.0\.1-py3-none-any\.whl$'
-          ls dist | grep -q '^vizi_plugin_sdk-0\.0\.1\.tar\.gz$'
+          test -f "dist/vizi_plugin_sdk-$VERSION-py3-none-any.whl"
+          test -f "dist/vizi_plugin_sdk-$VERSION.tar.gz"
+      - name: The sdist holds the package, README, LICENSE and NOTICE, and nothing else
+        run: |
+          tar -tzf "dist/vizi_plugin_sdk-$VERSION.tar.gz" | sed "s|^vizi_plugin_sdk-$VERSION/||" > sdist-files.txt
+          cat sdist-files.txt
+          ! grep -v -E '^(vizi_plugin_sdk/.*\.py|README\.md|LICENSE|NOTICE|pyproject\.toml|PKG-INFO|\.gitignore)$' sdist-files.txt
+          for f in README.md LICENSE NOTICE vizi_plugin_sdk/__init__.py; do grep -qx "$f" sdist-files.txt; done
       - uses: actions/upload-artifact@v4
         with:
           name: dist
