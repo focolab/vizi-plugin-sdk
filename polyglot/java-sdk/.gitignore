@@ -1,0 +1,9 @@
+# Build output: mill's, the examples' build/ trees, jars, and the JVM a build
+# records.
+out/
+out-*/
+build/
+*.jar
+.java-home
+.bsp/
+.metals/

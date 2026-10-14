@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vizi-plugin-sdk"
+version = "0.0.1"
+description = "Placeholder holding the vizi-plugin-sdk name; the SDK is not yet released"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Science/Research",
+]
+
+[project.urls]
+Homepage = "https://vizi.science"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vizi_plugin_sdk"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["vizi_plugin_sdk", "README.md", "pyproject.toml"]

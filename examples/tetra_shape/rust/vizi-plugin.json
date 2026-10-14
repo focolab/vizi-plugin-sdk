@@ -1,0 +1,39 @@
+{
+  "assets": [],
+  "contributions": {
+    "commands": [
+      {
+        "id": "tetra.contribute",
+        "menu": null,
+        "title": "Contribute the tetrahedra"
+      }
+    ],
+    "region_types": [
+      {
+        "id": "tetra.volume",
+        "name": "Tetrahedron (keeps its volume)"
+      },
+      {
+        "id": "tetra.unshaped",
+        "name": "Tetrahedron (no shaper)"
+      }
+    ]
+  },
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      "sh",
+      "launch.sh"
+    ]
+  },
+  "id": "org.example.tetra_shape",
+  "manifest_version": 1,
+  "name": "Tetra Shape",
+  "permissions": [
+    "contribute_rois"
+  ],
+  "subscriptions": [],
+  "version": "0.1.0"
+}

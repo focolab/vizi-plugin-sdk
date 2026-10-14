@@ -1,0 +1,77 @@
+# Publish to PyPI through trusted publishing (OIDC): no token exists anywhere.
+#
+# PyPI has no name reservation; a project exists once a first release is
+# uploaded.  This workflow uploads ONLY the placeholder under
+# `pypi-placeholder/` (version 0.0.1, no code), which holds the
+# `vizi-plugin-sdk` name.  Switching it to the real package is a deliberate
+# change to the build step below, not an input.
+#
+# Manual only, from master.  The PyPI side is a trusted publisher naming this
+# repository, this file's name and the `pypi` environment; all three must
+# match exactly or PyPI refuses the upload with "invalid-publisher".
+#
+# Runs on a self-hosted runner when the repository variable LINUX_RUNNER is
+# set (system python3 in a venv; Docker is needed for the publish action), and
+# on a hosted image when it is not.
+
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "placeholder" to upload the placeholder release'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency: publish
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/master' && inputs.confirm == 'placeholder'
+    runs-on: ${{ fromJSON(vars.LINUX_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: '3.11'
+      - name: Build tool in a venv
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --upgrade pip build
+      - name: Build the placeholder only
+        run: rm -rf dist && "$RUNNER_TEMP/venv/bin/python" -m build --outdir dist pypi-placeholder
+      - name: Refuse anything but the two placeholder files
+        run: |
+          ls -l dist
+          test "$(ls dist | wc -l)" = 2
+          ls dist | grep -q '^vizi_plugin_sdk-0\.0\.1-py3-none-any\.whl$'
+          ls dist | grep -q '^vizi_plugin_sdk-0\.0\.1\.tar\.gz$'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ${{ fromJSON(vars.LINUX_RUNNER || '"ubuntu-latest"') }}
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      # Self-hosted: the workspace persists between runs, and the publish action
+      # refuses a dist/ that still holds a previous attempt's .publish.attestation
+      # files. Start from an empty dist/.
+      - name: Empty dist/ left by a previous run
+        run: rm -rf dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

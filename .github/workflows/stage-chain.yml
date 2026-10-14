@@ -1,0 +1,101 @@
+name: Stage chain, a ring of pairs
+# `examples/stage_chain/`: the eleven scenarios of `SPEC.md`, each across
+# TWO plugin sessions sharing one `S` ring.  A pair is the real test: one
+# language's slot, header and hand-off read by another's.  The host is
+# `examples/vizi_hostsim/chain.py`.
+#
+# CI runs a RING, not every ordered pair, to keep feedback short: every
+# language goes first once and second once, and no language is the hub.
+#
+# Linux only: `python.yml` runs Python against itself on macOS too.
+on:
+  push:
+    paths:
+      - 'examples/stage_chain/**'
+      - 'examples/vizi_hostsim/**'
+      - 'polyglot/go-sdk/**'
+      - 'polyglot/rust-sdk/**'
+      - 'polyglot/java-sdk/**'
+      - 'vizi_plugin_sdk/**'
+      - 'proto/**'
+      - '.github/workflows/stage-chain.yml'
+  pull_request:
+    paths:
+      - 'examples/stage_chain/**'
+      - 'examples/vizi_hostsim/**'
+      - 'polyglot/go-sdk/**'
+      - 'polyglot/rust-sdk/**'
+      - 'polyglot/java-sdk/**'
+      - 'vizi_plugin_sdk/**'
+      - 'proto/**'
+      - '.github/workflows/stage-chain.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pairs:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    env:
+      LANGS: python go rust java
+      # A before B, each pair; every language is A once and B once.
+      PAIRS: python:go go:rust rust:java java:python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/stage_chain/go/go.mod
+          cache-dependency-path: examples/stage_chain/go/go.sum
+      - run: rustup toolchain install stable --profile minimal
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.cache/mill
+          key: stage-chain-java-${{ hashFiles('polyglot/java-sdk/build.mill', 'polyglot/java-sdk/mill') }}
+          restore-keys: stage-chain-java-
+      - name: Sync the locked environment, and point the launcher at it
+        run: |
+          uv sync --frozen
+          echo "VIZI_HOSTSIM_PYTHON=$(uv run python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      # Built once here, so each launch's own build step is a no-op well
+      # inside the host's launch budget.
+      - name: Build the Go port
+        working-directory: examples/stage_chain/go
+        run: go build -o stage-chain .
+      - name: Build the Rust port
+        working-directory: examples/stage_chain/rust
+        run: cargo build --locked --quiet --target-dir target
+      # Java: the SDK published to ~/.m2 and the port assembled into one jar
+      # (./assemble does both), launched as plain java.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Build the Java port
+        run: (cd examples/stage_chain/java && ./assemble)
+      - name: The ring of pairs
+        run: |
+          failed=""
+          for pair in $PAIRS; do
+            a=${pair%%:*}; b=${pair##*:}
+            echo "::group::A = $a, B = $b"
+            if uv run python examples/stage_chain/python/hostsim.py \
+                 --plugin-dir "examples/stage_chain/$a" --other-dir "examples/stage_chain/$b"; then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              echo "::error::A = $a, B = $b failed"
+              failed="$failed $a/$b"
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "failed:$failed"
+            exit 1
+          fi
+          echo "the ring ($PAIRS) passed"

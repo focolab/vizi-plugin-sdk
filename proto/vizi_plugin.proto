@@ -1,0 +1,2805 @@
+syntax = "proto3";
+
+import "roi.proto";
+
+// vizi plugin platform — control-plane contract.
+//
+// THE BOUNDARY VIZI PUBLISHES — NOT ITS CODE. Third-party plugins build against
+// this versioned IPC contract + a thin open SDK; no vizi implementation crosses
+// it.
+//
+// Roles: the PLUGIN runs the gRPC server on a Unix domain socket the Broker
+// hands it; the vizi host connects as the CLIENT. The whole session (hello,
+// ops, close) lives inside ONE bidirectional stream whose lifetime IS the
+// session — when it ends, the plugin drops every reader handle opened on it.
+//
+// CONTROL PLANE ONLY — human-rate. Pixels NEVER travel here: a ReadVolume reply
+// returns only a DESCRIPTOR (which shared segment, offset, shape, dtype). The
+// bytes live in a shared-memory segment the host granted the plugin on the
+// doorbell (an `M` record; doorbell_M_memory.md) and described here with
+// `InstallSegment`; the plugin writes its result there and the host maps it
+// zero-copy. Per-frame traffic rides the doorbell, not this stream (the gRPC
+// round trip is too costly per frame). gRPC never appears in a per-frame loop.
+//
+// VERSIONING — append-only within a major, protobuf-enforced. Field numbers are
+// permanent; new fields take new numbers; old peers ignore unknown fields;
+// retired numbers go in `reserved`. No Rust ABI is ever named here. The package
+// is version-pinned to the protocol MAJOR (`vizi.plugin.v1` for `1.x`); a new
+// major bumps the package, which is why it is on the wire as the service path
+// and cannot change within one.
+//
+// Slice/selection semantics match every other vizi transport.
+
+package vizi.plugin.v1;
+
+service Plugin {
+  // The whole plugin session (hello, reader ops, close) is one bidi stream.
+  rpc Session(stream HostMsg) returns (stream PluginMsg);
+}
+
+// ---- host (vizi) → plugin ----
+
+message HostMsg {
+  // Correlation id.  On a host request the host allocates it and the plugin
+  // echoes it; on a reply to a PLUGIN request (the arms below the second
+  // divider) it echoes the id the PLUGIN allocated, byte for byte.  An
+  // unsolicited push carries an EMPTY id -- see the note on PluginMsg.id.
+  // The one exception is `Hello`: its id is the host's identity string,
+  // `Hello from <version string>` (spec §3.1) -- checked for form by the
+  // plugin, never matched.
+  string id = 1;
+  oneof msg {
+    Hello hello = 2;            // first message; version + identity string
+    OpenReader open_reader = 3; // "open this URI as a dataset"
+    ReadVolume read_volume = 4; // 3D (Z,Y,X) at (t, c, level) -> descriptor
+    ReadPlane read_plane = 5;   // 2D (Y,X) at (t, z, c, level) -> descriptor
+    Metadata metadata = 6;      // fetch the reader's metadata document
+    CloseReader close_reader = 7;
+    Shutdown shutdown = 8;
+    InvokeCommand invoke_command = 9; // run a manifest-declared command
+    OpenExport open_export = 10;      // start a manifest-declared export
+    ExportChunk export_chunk = 11;    // one timepoint slab of voxels -> exporter
+    FinishExport finish_export = 12;  // finalize the artifact
+    AbortExport abort_export = 13;    // abandon; partial artifact is the plugin's to clean
+    // Data-access replies: ONE-WAY host->plugin messages answering a
+    // plugin-initiated request; `id` echoes the PLUGIN's chosen id.  Sent
+    // outside the single-in-flight request slot (they expect no PluginMsg
+    // reply), so they can leave while e.g. an InvokeCommand is pending.
+    ViewState view_state = 14;   // reply to GetViewState
+    DataVolume data_volume = 15; // reply to ReadDataVolume (a descriptor!)
+    Error host_error = 16;       // failed plugin-initiated request
+    RoiList rois = 17;           // reply to GetRois
+    LabelVolumeCompiled label_volume_compiled = 18; // reply to CompileLabelVolume
+    MaskVoxels mask_voxels = 19; // reply to ReadMaskVoxels (descriptor, never bytes)
+    ToolActivationChanged tool_activation_changed = 20; // reply to ActivateTool
+    AssetResult asset_result = 21; // reply to RequestAsset
+    RequestStatus request_status = 35; // reply to RequestStatusQuery
+    SavePathResult save_path_result = 39; // reply to RequestSavePath
+    // §8.7's subscribed state pushes: host→plugin COALESCING, sent only
+    // when something changed.  ViewChanged is the whole current state;
+    // RegionsChanged is what changed since the last one sent -- or everything,
+    // when its `reset` is set.
+    ViewChanged view_changed = 40;
+    RegionsChanged regions_changed = 41;
+    ColormapTable colormap_table = 42; // reply to GetColormap
+    ViewRequestResult view_request_result = 43; // reply to ViewRequest
+    // Follow (§8.15): one-shot pushes, each a transition never restated.
+    FollowStarted follow_started = 44;
+    FollowEnded follow_ended = 45;
+    RoisContributed rois_contributed = 22; // reply to ContributeRois
+    RoiPosesExtended roi_poses_extended = 34; // reply to ExtendRoiPoses
+    RoiInclusion roi_inclusion = 36; // reply to ReadRoiInclusion (descriptor, never bytes)
+    // Processing stages (processing_stages.md); vizi sends both for
+    // Tools -> Apply Filter.  A turn is the slot's turn word hinted by
+    // `D`, never a message here.
+    PlanStage plan_stage = 37;       // request -> StagePlanned | Error
+    StageArm stage_arm = 38;         // arrangement -> StageArmAck
+    // Arrangements (23-25, 29): not usable until the plugin acknowledges, and
+    // the acknowledgement means INSTALLED rather than received.
+    InstallSegment install_segment = 23;  // -> GrantAck
+    ToolBinding tool_binding = 24;        // -> ToolBindingAck
+    EpochChange epoch_change = 25;        // -> EpochAck
+    // One-ways: no reply, and outside the in-flight slot so they cannot queue
+    // behind the very command whose data they carry.
+    GrantStateQuery grant_state_query = 26; // -> GrantState (a push, not a reply)
+    RetireSegment retire_segment = 27;      // -> SegmentReleased
+    PanelOpened panel_opened = 28;          // moved here from doorbell op `L`
+    TimeMapping time_mapping = 29;          // -> TimeMappingAck (an arrangement)
+    DoorbellShutdown doorbell_shutdown = 30;
+    // The first host->plugin push that is neither a reply nor an arrangement.
+    // One-shot: losing one strands bytes the plugin may not reuse.
+    ReleaseLoan release_loan = 31;
+    // Symmetric with the plugin->host arm: three of ContractViolation's four
+    // memory-layer sites (a D bit naming an Owned region, an impossible Pulsed
+    // state word, a failed release CAS) are equally detectable in a PLUGIN's
+    // traffic, and DoorbellShutdown does not cover them because it is terminal
+    // and these are report-and-continue.  The E-record sites in ViolationSite
+    // are plugin->host only, since E flows one way.
+    ContractViolation contract_violation = 32;
+    // The first host->plugin COALESCING push (control_plane_protocol.md §5.7):
+    // which (level, t) volumes of a CHUNKED overlay the host wants to HOLD --
+    // the ones it already holds included -- restated whole whenever the set
+    // changes.  A plugin serves each want once per continuous membership, and
+    // again when its own results change.  The host merges on its own side
+    // (one send per change per overlay) and the plugin keeps the latest;
+    // there is no receive queue to size.
+    ChunksWanted chunks_wanted = 33;
+    // One-way (§8.16): stop a request in flight or a background task.
+    // Sent outside the single in-flight slot -- the request it names holds it.
+    CancelWork cancel_work = 46;
+    // ---- region types a plugin shapes (§8.8) ----
+    // Coalescing, keyed by `drag_id`: where the person's drag of an asked
+    // region's handle has got to.  The host merges on its own side; the
+    // plugin answers the latest with `shape_proposal`, or not at all.
+    ShapeEdit shape_drag = 47;
+    // One-shot: the drag was released (or one spinbox edit made); the
+    // plugin's `shape_answer` to it is the commit.  A push, not a host
+    // request, so it never queues behind a command holding the in-flight
+    // slot (§5.1) while a person waits on it.
+    ShapeEdit shape_commit = 48;
+    // One-shot: how the edit ended.  Sent for every drag the host began,
+    // except across a session's end.
+    ShapeEditEnded shape_edit_ended = 49;
+  }
+}
+
+// Runtime handshake. The plugin's manifest already declared `engines.vizi`
+// (min host protocol it supports); Hello is the live confirmation + the host's
+// actual protocol version so the plugin can refuse a too-new host.
+// The host's first message.  Its HostMsg.id is the host's identity string
+// (spec §3.1); the fields below are the version and the Windows token.
+message Hello {
+  uint32 protocol_major = 1;  // host's plugin-protocol version
+  uint32 protocol_minor = 2;
+  // Per-session secret: on transports whose endpoint is reachable by
+  // other local processes (Windows TCP-localhost), the host passes this to
+  // the plugin via its environment and repeats it here — the plugin drops a
+  // session whose Hello token does not match.  Empty on unix (a UDS path
+  // already carries filesystem permissions).
+  string session_token = 3;
+}
+
+message OpenReader {
+  // The resource to open (a local path, or a plugin-specific URI). The plugin
+  // declared the format(s) it handles in its manifest's `readers` contribution.
+  string uri = 1;
+  // WHICH reader contribution is being opened, by its manifest `id`.
+  //
+  // The HOST names it, and that is the whole point: a plugin declaring two
+  // readers had no specified routing rule, so it had to re-derive from the URI
+  // the decision the host had already made -- and two implementations deriving
+  // the same answer from the same string is precisely the agreement this
+  // protocol does not ask for anywhere else.  The host matched a contribution
+  // in order to send this message at all; saying which costs a field and
+  // removes the guess.
+  //
+  // EMPTY means the host did not name one, which a plugin declaring exactly one
+  // reader may treat as that reader.  A plugin declaring several refuses an
+  // empty `reader_id` rather than picking: the ambiguity is the host's to
+  // resolve, and guessing is how one SDK opens a file another rejects.
+  string reader_id = 2;
+  // This plugin's folder for the file being opened, as `ViewState.file_state_dir`:
+  // named, not created; empty when `uri` is not a local path.
+  // Additive at `1.0`.
+  string file_state_dir = 3;
+  // WHICH image inside `uri`, for a file that holds several: an NWB
+  // file's ImageSeries, an OME-Zarr's numbered series, an OME-TIFF's Images.
+  // An id the READER gave in a `SeriesList`; the host stores it and sends it
+  // back and never interprets it.
+  //
+  // UNSET asks the reader to choose or to ask: a file with one image opens
+  // (`ReaderOpened`), and a file with several answers `SeriesList`, which
+  // changes nothing -- the reader already open stays open, as after `Error`
+  // (`reader_writer_contract.md` §1.2) -- and the host repeats this message
+  // with the chosen id set.  A reader may instead open a default of its own
+  // when one is honestly the image a user means.  SET names one; an id the
+  // reader does not recognise is refused `NOT_FOUND`, which is how a stale
+  // recent-files entry learns its series is gone.  A reader whose files hold
+  // one image ignores the field.  Presence matters, so `optional`: "" may be a
+  // reader's id.  Additive at `1.0`.
+  optional string series = 4;
+}
+
+// Reads name a reader `handle` returned by ReaderOpened. The reply carries no
+// pixels — only a SegmentRef into the host-granted shared segment.
+message ReadVolume {
+  string handle = 1;
+  uint32 t = 2;
+  uint32 c = 3;
+  uint32 level = 4;  // pyramid level; 0 = full resolution
+}
+
+message ReadPlane {
+  string handle = 1;
+  uint32 t = 2;
+  uint32 z = 3;
+  uint32 c = 4;
+  uint32 level = 5;
+}
+
+message Metadata {
+  string handle = 1;
+}
+
+message CloseReader {
+  string handle = 1;
+}
+
+// Why the host is ending the SESSION (control_plane_protocol.md §3.3).  It is
+// the counterpart of DoorbellShutdownReason in position only -- the value sets
+// are disjoint and deliberately so: that enum classifies how a CHANNEL broke,
+// this one answers "will this plugin be started again", which is the only thing
+// a plugin can act on inside its shutdown window.
+// The axis is WILL I BE STARTED AGAIN, because that is the only thing a plugin
+// can usefully act on.  Each reaction below is PERMITTED, never required: a
+// plugin that ignores `reason` entirely and just runs its hook is conforming.
+enum ShutdownReason {
+  SHUTDOWN_REASON_UNSPECIFIED = 0;
+  // vizi is closing.  Not coming back this run: discard warm caches rather than
+  // spending the window persisting them.
+  SHUTDOWN_REASON_HOST_EXIT = 1;
+  // Plugin Manager, or a manifest change.  Not coming back until a person acts.
+  SHUTDOWN_REASON_USER_DISABLED = 2;
+  // An unrecoverable session fault (control_plane_protocol.md §10).  Something
+  // was wrong; a final
+  // diagnostic is worth more here than anywhere else, and the host may or may
+  // not retry.
+  SHUTDOWN_REASON_SESSION_FAULT = 3;
+  // Teardown ahead of a relaunch, imminently.  The one reason it is worth
+  // PERSISTING expensive derived state for -- and the only one where a plugin
+  // may assume it will be asked for the same work again.
+  SHUTDOWN_REASON_RESTART = 4;
+  // The host has no further use for it right now -- a dataset closed, a
+  // contribution went idle.  May be started again without a person acting.
+  SHUTDOWN_REASON_NOT_NEEDED = 5;
+  // The person stopped it from the work it was doing (§8.16): a request
+  // or task they cancelled went unanswered.  Started again the next time it is
+  // used.
+  SHUTDOWN_REASON_USER_STOPPED = 6;
+}
+
+// Ends the SESSION.  Not DoorbellShutdown, which closes one channel and leaves
+// this one alive long enough to hear the report; a teardown that begins with a
+// doorbell fault sends both, in that order.
+//
+// The plugin's obligations inside the window -- where the hook runs, what it
+// may and may not do, and that CLOSING THE STREAM is what "done" means -- are
+// control_plane_protocol.md §3.3.  Every field is optional: an empty
+// Shutdown is wire-valid and reads as UNSPECIFIED with no deadline.
+// The plugin's outcome, sent on the control plane ahead of the stream close
+// that ends the session (control_plane_protocol.md §3.3).  Choosing close as
+// the completion signal over an acknowledgement is deliberate -- an ack would
+// need a message, a matching id, and a rule for a plugin that sends it and
+// then keeps running -- but close alone cannot carry a reason, so the reason
+// rides ahead of it.
+//
+// This does NOT contradict the rejection of a heartbeat: a heartbeat is asked
+// to prove a handler ran, which a stream-level event cannot do.  Here the
+// handler reports its own outcome and the stream event only bounds it.
+message ShutdownReport {
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    NO_HOOK = 1;    // nothing registered; the plugin closed immediately
+    COMPLETED = 2;  // the hook returned inside the window
+    RAISED = 3;     // the hook threw; `detail` carries it.  Teardown continues
+    OVERRAN = 4;    // the window expired with the hook still running
+  }
+  Outcome outcome = 1;
+  string detail = 2;              // for the host's diagnostic; never parsed
+}
+
+message Shutdown {
+  ShutdownReason reason = 1;
+  // A DURATION measured from the host's SEND, never an absolute time, for the
+  // same reason DoorbellShutdown's is: the host cannot know when the message
+  // arrived, so a duration measured at the receiver would promise time the host
+  // does not intend to give.  At the receiver it is an upper bound, not a
+  // budget -- the host tears down at its own deadline either way.
+  //
+  // OPTIONAL so that ABSENCE IS REPRESENTABLE, which the report below needs.
+  // §9 requires the host to always set this and lets a receiver adopt the
+  // table's 5 s when it does not, reporting `missing_deadline`.  As a plain
+  // `uint32` that report is unimplementable: proto3 encodes an unset scalar and
+  // a zero-valued one identically, so a receiver could not tell a host that
+  // FORGOT the field from one that meant no grace at all, and the violation
+  // would fire on a conforming peer.  Presence separates them.
+  optional uint32 deadline_ms = 2;
+  string detail = 3;              // for the plugin's own log; never parsed
+}
+
+// ---- plugin → host (vizi) ----
+
+message PluginMsg {
+  // Echoes the request id.  EMPTY on every unsolicited push, in both
+  // directions -- `PanelPatch`, `OverlayUpdate`, `OverlayRemove` and
+  // `ReleaseDeposit`, none of which correlates with anything.  A receiver
+  // must not reject a message for carrying an empty id, and must decide a
+  // message's class by its KIND before matching an id at all; matching first
+  // drops every unsolicited message as a stray.  The one exception is
+  // `Ready`: its id is the plugin's identity string, `Ready; I am <version
+  // string>` (spec §3.1) -- non-empty, at most 2048 bytes, no control
+  // characters -- and the host fails the session on any other form.
+  string id = 1;
+  oneof msg {
+    Ready ready = 2;             // unsolicited first message; version + identity string
+    ReaderOpened reader_opened = 3;
+    SeriesList series_list = 49;   // reply to OpenReader: several images, pick one
+    SegmentRef segment = 4;      // reply to ReadVolume / ReadPlane (a handle!)
+    MetadataResult metadata = 5;
+    Closed closed = 6;
+    Error error = 7;
+    CommandDone command_done = 8;   // reply to InvokeCommand
+    PanelPatch panel_patch = 9;     // UNSOLICITED push: declarative-panel state
+    ExportOpened export_opened = 10; // reply to OpenExport
+    ChunkWritten chunk_written = 11; // reply to ExportChunk — authoritative
+    ExportDone export_done = 12;     // reply to FinishExport
+    OverlayUpdate overlay_update = 13; // UNSOLICITED push: overlay draw list
+    OverlayRemove overlay_remove = 14; // UNSOLICITED push: retract an overlay
+    // Data-access requests: the protocol's first PLUGIN-INITIATED
+    // request-with-reply.  `id` is PLUGIN-chosen (the SDK uses "q<n>"); the
+    // host answers with a HostMsg (view_state / data_volume / host_error)
+    // echoing that id.  Gated on the manifest's `data_access` permission.
+    // The host never silently drops one: a request that can't be served
+    // (backpressure, no dataset, no permission) yields `host_error`.
+    GetViewState get_view_state = 15;       // -> ViewState
+    ReadDataVolume read_data_volume = 16;   // -> DataVolume (segment descriptor)
+    ContributeRois contribute_rois = 17;    // -> RoisContributed
+    GetRois get_rois = 18;                  // -> RoiList
+    ExtendRoiPoses extend_roi_poses = 38;   // -> RoiPosesExtended
+    // Uses the same request/reply mechanics but is gated on contribute_rois:
+    // it mutates native Annotations rather than reading user data.
+    CompileLabelVolume compile_label_volume = 19; // -> LabelVolumeCompiled
+    ReadMaskVoxels read_mask_voxels = 20; // -> MaskVoxels (DATA-segment descriptor)
+    ActivateTool activate_tool = 21; // -> ToolActivationChanged
+    RequestAsset request_asset = 22; // -> AssetResult
+    // -> RequestStatus.  Numbered 39 because 38 went to extend_roi_poses,
+    // which is declared above beside the other ROI requests.
+    RequestStatusQuery request_status_query = 39;
+    ReadRoiInclusion read_roi_inclusion = 40; // -> RoiInclusion (DATA-segment descriptor)
+    RequestSavePath request_save_path = 43; // -> SavePathResult
+    GetColormap get_colormap = 44;          // -> ColormapTable
+    ViewRequest view_request = 45;          // -> ViewRequestResult (§8.15)
+    // Follow (§8.15).  An offer and a state are COALESCING pushes, keyed
+    // by the panel and by the Follow; ending one's own Follow is one-shot.
+    OfferFollow offer_follow = 46;
+    FollowState follow_state = 47;
+    EndFollow end_follow = 48;
+    // Processing stages (processing_stages.md).
+    StagePlanned stage_planned = 41; // reply to PlanStage
+    StageArmAck stage_arm_ack = 42;  // acknowledges a StageArm revision
+    ReleaseDeposit release_deposit = 23; // UNSOLICITED push: DATA bytes copied
+    // Acknowledgements (24-26): one-shot pushes, never on a coalescing queue --
+    // dropping one leaves an arrangement permanently pending.
+    GrantAck grant_ack = 24;
+    ToolBindingAck tool_binding_ack = 25;
+    EpochAck epoch_ack = 26;
+    TimeMappingAck time_mapping_ack = 27;
+    // One-shot pushes.
+    GrantState grant_state = 28;          // answers GrantStateQuery, echoing its id
+    SegmentReleased segment_released = 29;
+    ReleaseRequest release_request = 30;  // a HINT; the host owes it nothing
+    DoorbellFault doorbell_fault = 31;
+    DoorbellFinalReport doorbell_final_report = 32;
+    ContractViolation contract_violation = 33; // rate-bounded; does NOT end the session
+    SegmentShortfall segment_shortfall = 34;   // coalescing; the arena came up short
+    // The plugin's own account of its shutdown, sent BEFORE it closes the
+    // stream.  Stream close is the completion signal and cannot say WHY: hook
+    // completed, hook raised, no hook registered and dispatch died of
+    // something unrelated are one event at the socket.
+    ShutdownReport shutdown_report = 35;
+    // ---- chunked overlays (control_plane_protocol.md §5.7, §8.5) ----
+    // Coalescing pushes, one per (overlay, level, t) and one per overlay: a
+    // plugin speaks of ONE volume of a time series at a time, as state, and
+    // only of the volumes the host has asked for in `ChunksWanted`.
+    OverlayChunk overlay_chunk = 36;
+    OverlayLabelTable overlay_label_table = 37;
+    // ---- long-running work (control_plane_protocol.md §8.16) ----
+    // Coalescing, keyed by its subject: the latest report of a request in
+    // flight or of a background task.
+    WorkProgress work_progress = 50;
+    // ---- region types a plugin shapes (§8.8) ----
+    // Coalescing, keyed by `drag_id`: the shape for a `shape_drag`.
+    ShapeResult shape_proposal = 51;
+    // One-shot: the shape for a `shape_commit` -- the one that is kept.
+    ShapeResult shape_answer = 52;
+  }
+}
+
+// The plugin's unsolicited hello: its implemented protocol version. The host
+// fails the session if the major doesn't match what it speaks.
+// The plugin's first message.  Its PluginMsg.id is the plugin's identity
+// string, `Ready; I am <version string>` (spec §3.1); the host records it
+// beside its own in the plugin's log.
+message Ready {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  string plugin_id = 3;       // echoes the manifest identity, for logging
+}
+
+enum DType {
+  DTYPE_UNSPECIFIED = 0;
+  DTYPE_U8 = 1;
+  DTYPE_U16 = 2;
+  DTYPE_F32 = 3;
+  DTYPE_F64 = 4;  // overlay geometry (ZYX doubles)
+}
+
+message ReaderOpened {
+  string handle = 1;          // names this reader for subsequent reads
+  // Canonical vizi axis order TCZYX. Always 5 elements.
+  repeated uint32 shape_tczyx = 2;
+  DType dtype = 3;
+  // Informational: the deposits a reader makes are little-endian, C-order,
+  // unpadded (shared_memory_protocol.md §2), and `true` is the only
+  // conforming value at 1.0 -- a reader whose source is big-endian converts.
+  bool little_endian = 4;
+  string axis_inference = 5;  // "ome" | "fallback" | plugin-specific
+  // Calibration the reader KNOWS, in the shape Geometry (§8.11) publishes it
+  // the other way.  0 and "" mean unknown -- "we do not know how big a voxel
+  // is", which is an honest and common answer -- and a host MUST NOT read the
+  // zero as a measurement; a reader that knows only some axes leaves the
+  // others 0.  A metadata document (Metadata / MetadataResult) may also carry
+  // these; when both are present and disagree, the fields win, because the
+  // reader chose them deliberately and the document was written by whoever
+  // wrote the file.  Additive at 1.0.
+  double spacing_z = 6;
+  double spacing_y = 7;
+  double spacing_x = 8;
+  string spacing_unit = 9;       // "um", or "" when unknown
+  double time_increment = 10;    // interval between consecutive t; 0 => unknown
+  string time_unit = 11;         // "s", or "" when unknown
+  // The channels' names, by index, as the reader knows them: "" for a
+  // channel it does not name, and it may stop short of C.  They win over a
+  // metadata document's names, per channel and where non-empty, by the rule
+  // the calibration fields follow.  Additive at 1.0.
+  repeated string channel_names = 12;
+}
+
+// The reply to an `OpenReader` with `series` unset, for a file holding more
+// than one image.  Nothing was opened and nothing changed: the host
+// shows these to the user and repeats `OpenReader` with the chosen `id`.
+// Additive at `1.0`.
+message SeriesList {
+  // In the reader's order, which is the order a user is shown.  Bounded only
+  // by the message ceiling (§9): a file can hold tens of thousands of images
+  // and saying so honestly is the point, so this is one of §9's named
+  // exceptions to the repeated-field count.
+  repeated SeriesEntry entries = 1;
+  // True when the reader had more than fit in one message and sent a prefix.
+  bool truncated = 2;
+}
+
+message SeriesEntry {
+  string id = 1;            // opaque to the host; sent back as `OpenReader.series`
+  string label = 2;         // what a user is shown; "" => the host shows the id
+  repeated uint32 shape_tczyx = 3; // 5 elements, or empty when unknown before opening
+  DType dtype = 4;          // DTYPE_UNSPECIFIED when unknown before opening
+  string description = 5;   // one line, optional
+}
+
+// A descriptor into a host-granted shared segment — NOT the bytes. The host
+// granted `segment_id` on the doorbell (shared_memory_protocol.md §9a); the
+// plugin wrote the result into [offset, offset+len) and the host maps that
+// range zero-copy. The host validates shape/dtype/bounds against the
+// segment capacity before consuming (untrusted plugin).
+message SegmentRef {
+  uint64 segment_id = 1;      // which granted segment
+  uint64 offset = 2;          // byte offset of the payload within the segment
+  uint64 len = 3;             // payload length in bytes
+  // Payload spatial shape (Z,Y,X for a volume; 1,Y,X for a plane), so the host
+  // can bounds-check len against shape*dtype before reinterpreting.
+  repeated uint32 shape_zyx = 4;
+  DType dtype = 5;
+  // How many messages will name this reservation, declared by the SENDER.
+  // 0 and 1 both mean one, so a peer that never sets it declares one.
+  //
+  // The receiver CANNOT derive this: two messages naming one reservation can
+  // travel on paths with different drain priority (a request is served ahead of
+  // a coalescing push, §5.3), so a receiver that released when its own count of
+  // STARTED uses hit zero would release before a use still in flight arrived --
+  // and the sender would then be free to overwrite bytes the second message
+  // names.  Only the sender knows the set at write time.
+  //
+  // The receiver decrements on EVERY disposition -- applied, superseded,
+  // rejected -- and releases at zero, so arrival order does not matter.  A
+  // sender that declares more uses than it sends pins the reservation until
+  // retirement or teardown; that is waste, never corruption.
+  uint32 uses = 6;
+}
+
+message MetadataResult {
+  // "" form means the reader has no metadata document.
+  string form = 1;            // "ome-xml" | "ome-ngff" | ""
+  string text = 2;
+}
+
+message Closed {
+  string handle = 1;
+}
+
+// Structured plugin error, echoed against the request id.
+message Error {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    INVALID_ARGUMENT = 1;
+    NOT_FOUND = 2;       // unknown handle / URI
+    UNSUPPORTED = 3;     // plugin doesn't handle this resource
+    OUT_OF_BOUNDS = 4;   // t/z/c/level out of range
+    IO_ERROR = 5;
+    PROTOCOL = 6;        // version mismatch / malformed request
+    INTERNAL = 7;
+    // The request stopped because the host sent `CancelWork` for it
+    // (§8.16).  Not a fault: a host records nothing against the plugin for it.
+    CANCELLED = 8;
+  }
+  Kind kind = 1;
+  string message = 2;
+}
+
+// ---- Commands + declarative panels ----
+//
+// Commands are the addressable backbone: the
+// host's menus / keybindings / panel widgets fire a command ID; the plugin
+// runs its registered handler and replies CommandDone.  Panels are
+// host-built from the manifest's static declaration; the plugin never sees a
+// widget — it receives command invocations (with the initiating widget's
+// value in `args`) and pushes PanelPatch state updates back, UNSOLICITED, on
+// the same stream ("plugins propose, host disposes").
+
+// A typed argument value.  A oneof (not map<string,string>) because a map's
+// value type can never change wire-compatibly and every plugin would
+// hand-parse floats/bools; new kinds append as new field numbers.
+message Value {
+  oneof kind {
+    string s = 1;
+    double f = 2;
+    sint64 i = 3;
+    bool b = 4;
+    // A list of integers: a multi-select `channel_picker`'s value.
+    IntList ints = 5;
+  }
+}
+
+message IntList {
+  repeated sint64 values = 1;
+}
+
+message InvokeCommand {
+  string command_id = 1;          // manifest-declared id
+  // Named arguments.  Widget events populate e.g. {"value": f} for a slider,
+  // {"value": b} for a checkbox, {"index": i, "value": s} for a dropdown.
+  map<string, Value> args = 2;
+  // Set-view (control_plane_protocol.md §8.15): the host-minted token for
+  // THIS interaction with a widget declared `moves_view`, which a `ViewRequest`
+  // names to move the person's view.  0 for every other invocation.
+  uint64 cause = 3;
+}
+
+message CommandDone {
+  string command_id = 1;
+  bool ok = 2;
+  string message = 3;             // human-readable outcome detail; shown on
+                                  // failure, and on success when non-empty
+  Value result = 4;               // optional structured result (reserved use)
+}
+
+// "Is request `subject_id` still yours?" (control_plane_protocol.md §8.9).
+//
+// NOT a heartbeat, which §14 rejects: a heartbeat is unsolicited and proves the
+// stream turns rather than that the peer's handlers do.  This is solicited, it
+// names ONE in-flight request, and answering it makes the host consult the
+// bookkeeping for that request -- the shape of `GrantStateQuery`, in the other
+// direction and for the same reason: a thing can be in flight with the send
+// reporting success.
+//
+// Asked when a plugin has been waiting a long time and cannot tell a person
+// browsing a file picker from a host that has stopped draining.  A query that
+// itself times out is the host not answering, which §9's rule already covers:
+// UNKNOWN, never DEAD.
+message RequestStatusQuery {
+  string subject_id = 1;  // the `PluginMsg.id` being asked about
+}
+
+message RequestStatus {
+  enum Disposition {
+    DISPOSITION_UNSPECIFIED = 0;
+    // The host holds this request and has not answered it.  NOT a promise that
+    // it will finish, or when.
+    PENDING = 1;
+    // No record: answered, abandoned, or never arrived.  The three are not
+    // separated because the plugin's move is the same for all of them, and
+    // telling them apart would mean retaining every answered id.
+    UNKNOWN = 2;
+  }
+  string subject_id = 1;
+  Disposition disposition = 2;
+  // PENDING only: the host is blocked on a PERSON for this request -- §8.9's
+  // picker is up.  The delay is not the host's to shorten and not the
+  // plugin's; a plugin that sees this keeps waiting rather than giving up.
+  bool awaiting_user = 3;
+}
+
+// One panel state patch: a batch of per-widget ops the host applies on the
+// Qt thread.  Pushed by the plugin at any time (its own thread), delivered
+// through the host's inbound queue + pump.  Last-write-wins per widget.
+message PanelPatch {
+  string panel_id = 1;            // manifest-declared panel
+  repeated PatchOp ops = 2;
+}
+
+// Host->plugin panel lifecycle event.  An ordinary HostMsg one-way and not a
+// doorbell record -- it needs neither a descriptor nor interactive latency,
+// which is the whole of what the doorbell is for.
+message PanelOpened {
+  string panel_id = 1;
+}
+
+message PatchOp {
+  string widget_id = 1;           // manifest-declared widget within the panel
+  oneof op {
+    Value set_value = 2;          // slider/checkbox/dropdown/line_edit/label value
+    bool set_enabled = 3;
+    bool set_visible = 4;
+    Options set_options = 5;      // replace a dropdown's option list
+    ImageRef set_image = 6;       // image widget content (PNG in the panel segment)
+    Progress set_progress = 7;    // progress widget; see Progress
+    RowKeys set_rows = 8;         // a `list`'s rows, in order; see RowKeys
+  }
+  // A `list` row's cell: which row, by the key `set_rows` gave it, with
+  // `widget_id` naming the template widget.  "" for every widget that is not
+  // a cell of a list.
+  string row_key = 9;
+}
+
+// A `list` widget's rows (manifest_schema.md §3.3.1): the WHOLE ordered
+// key list, which replaces the last -- a state, like every patch.  Order is
+// display order.  A new key's row starts from the template's declared values;
+// a key that leaves drops its row, and one that returns starts fresh.  Keys
+// are non-empty, distinct, at most 128 characters, and at most the list's
+// `max_rows` of them: a list past that is refused whole, never truncated.
+message RowKeys {
+  repeated string keys = 1;
+}
+
+// How far along a `progress` widget is (manifest_schema.md §3.3.1).  A
+// dedicated op rather than `set_value` with a sentinel, because "how long this
+// takes is not known" is a STATE and not a number -- `plugin_principles.md` 11's
+// expressible absence, applied to a fraction.  The widget is NOT interactive:
+// it binds no command and the host never echoes it, which is what a plugin
+// driving a slider to show progress could not avoid.
+// How far along a request in flight or a background task is (§8.16).
+// Pushed at human rate and coalesced by subject, so a plugin may report as
+// often as it likes and the host shows the latest.
+//
+// A REQUEST's subject is the `id` of the host request it is working on -- the
+// `InvokeCommand`, `ReadVolume` or other request the host is waiting for.  A
+// TASK's is an id the plugin chooses for work that blocks no request: begun
+// by its first report, ended by one with `done`.
+message WorkProgress {
+  oneof subject {
+    string request_id = 1;
+    string task_id = 2;
+  }
+  string title = 3;       // a task's name; ignored for a request, which the host names
+  Progress progress = 4;  // absent: no measure, only `text`
+  string text = 5;        // what it is doing now, one line
+  bool done = 6;          // a task's end; `text` is then its outcome.  Ignored for a request
+  bool cancellable = 7;   // a task's; a request can always be asked to stop
+}
+
+// Stop the named work (§8.16).  Cooperative: the plugin stops when it
+// notices, and a REQUEST keeps the session's in-flight slot until the plugin
+// answers it -- with `Error{CANCELLED}`, or with whatever it had.  Naming work
+// already finished, or unknown, is a no-op.
+message CancelWork {
+  oneof subject {
+    string request_id = 1;
+    string task_id = 2;
+  }
+}
+
+message Progress {
+  double value = 1;        // clamped into [0, 1], NaN shown empty; ignored while `indeterminate`
+  bool indeterminate = 2;  // length unknown in advance -- the host shows activity
+}
+
+message Options {
+  repeated string options = 1;
+}
+
+// PNG bytes in the PANEL segment (granted with purpose 'P', distinct from the
+// reader segment — the host rejects cross-segment refs).  Lean on purpose: no
+// shape/dtype — a torn/invalid PNG fails safe at decode and the frame drops.
+message ImageRef {
+  uint64 segment_id = 1;
+  uint64 offset = 2;
+  uint64 len = 3;
+}
+
+// ---- Plugin exporters ----
+//
+// The write-side inverse of the reader deposit: the HOST writes the selected
+// voxels into a sealed EXPORT segment (granted with purpose 'X') and sends a
+// descriptor; the plugin reads them out and writes its artifact.  One DType,
+// `MetadataDoc.form` uses `MetadataResult`'s string grammar, the export lives
+// inside the stream-lifetime session (no session_id strings — the handle dies
+// with the stream), and the granted segment is the sole shared-memory carrier.
+//
+// Ingest-is-hint / committed-is-truth: ChunkWritten AUTHORITATIVELY reports
+// the bytes consumed.  AbortExport before FinishExport means the partial
+// artifact is ABANDONED — the plugin cleans it up, never silently finalizes.
+
+// A descriptive metadata document, tagged with the serialization it claims to
+// be (mirror of the reader's tagged, unparsed metadata document).  On
+// `OpenExport` it is the SOURCE's, never the artifact's: see `source_metadata`.
+message MetadataDoc {
+  string form = 1;  // "ome-xml" | "ome-ngff" | "" (none) — MetadataResult's grammar
+  string text = 2;
+}
+
+message OpenExport {
+  string exporter_id = 1;           // manifest-declared exporter
+  // Output target.  Path-valued today; typed as a string so a URL or
+  // object-store target needs no API fork later.
+  string locator = 2;
+  // Whole-artifact geometry, declared exactly once.  Canonical vizi axis
+  // order TCZYX, always 5 elements.
+  repeated uint32 shape_tczyx = 3;
+  DType dtype = 4;
+  // Informational: the host's ExportChunk deposits are little-endian, C-order,
+  // unpadded (shared_memory_protocol.md §2); `true` on every supported host.
+  bool little_endian = 5;
+  // The SOURCE's own metadata document, as its reader gave it; empty
+  // form when the source has none.  It describes the SOURCE -- its sizes,
+  // channels and pixel sizes -- and not the artifact, which may hold a subset
+  // of its channels and timepoints, a crop, a projection or a filter's output.
+  // So an exporter MUST NOT write it as the artifact's own description; it may
+  // embed it as provenance ("derived from a source with this metadata"),
+  // alongside `provenance`.  What the artifact itself is comes from the
+  // structured fields: `shape_tczyx`, the calibration and `channels`.
+  // (Was `metadata`, "written verbatim"; renamed at 1.0 because that contract
+  // was wrong for any export that subsets, and no host ever filled it.)
+  MetadataDoc source_metadata = 6;
+  // Calibration the host KNOWS, mirroring ReaderOpened's fields 6-11 exactly:
+  // 0 / "" mean unknown, and an exporter MUST NOT write the zero as a
+  // measurement -- an artifact that claims 1 um for an uncalibrated source is
+  // the defect this exists to prevent.  Additive at 1.0.
+  double spacing_z = 7;
+  double spacing_y = 8;
+  double spacing_x = 9;
+  string spacing_unit = 10;        // "um", or "" when unknown
+  double time_increment = 11;      // 0 => unknown
+  string time_unit = 12;           // "s", or "" when unknown
+  // This plugin's folder for the SOURCE dataset, as `ViewState.file_state_dir`
+  // -- not for `locator`, the artifact being written.  Named, not
+  // created; empty when the source has no local path.  Additive at `1.0`.
+  string file_state_dir = 13;
+  // The filter this export reads through: present when the user chose
+  // to export a filter's output, absent when the export is the file's own
+  // voxels.  Which chunks actually carry its output is each chunk's
+  // `filtered_channels`: by default a timepoint the stage did not process
+  // aborts the export, but when the user allowed it, it is exported
+  // as the file has it.  Additive at `1.0`.
+  AppliedFilter filter = 14;
+  // The artifact's channels, in its C order, each as the SOURCE channel
+  // `index` with the name the person sees and where that name came from.
+  // Write a name as the channel's only when `source` is FILE or
+  // USER: a PLACEHOLDER is the host's label for a channel nothing named, and
+  // written into the artifact it would read back as a name the file gave.
+  // Additive at `1.0`.
+  repeated ChannelInfo channels = 15;
+  // The host's provenance record for this export, JSON: the same
+  // record vizi embeds in its own exports -- the source's identity and
+  // fingerprint, the selection (timepoints, channels and their names, the
+  // crop in voxels and physical units), the filter and projection applied,
+  // and the host that wrote it.  Built at open: which timepoints of a filtered
+  // export went out unfiltered, each chunk's `filtered_channels` says.  An
+  // exporter SHOULD embed it where its format keeps extra metadata, as vizi
+  // does -- under `vizi:provenance` in an OME-Zarr's attributes, as an XML
+  // annotation in OME-XML.  Empty when the host keeps no record.  Additive at
+  // `1.0`.
+  string provenance = 16;
+}
+
+// One chunk of voxels: at most one timepoint slab.  The payload is
+// `channels.len()` volumes of `shape_zyx`, concatenated in `channels` order —
+// the plugin bounds-checks len == channels * prod(shape_zyx) * dtype size
+// before reinterpreting (the host is trusted, but cheap honesty keeps the
+// check symmetric with the reader path).
+message ExportChunk {
+  string handle = 1;                // from ExportOpened
+  uint32 t = 2;                     // SOURCE timepoint (reader_writer_contract.md §2.3):
+                                    // its artifact index is its rank among the
+                                    // export's distinct t's, which arrive ascending
+  repeated uint32 channels = 3;     // SOURCE channel indices present, in buffer order
+  oneof source {
+    SegmentRef segment = 4;         // host-written EXPORT segment (purpose 'X')
+    bytes inline = 5;               // small payloads / tests only
+  }
+  // The ride-along form of the installation; see DataVolume.install.  A
+  // receiver applies it exactly as there.  This host installs an export
+  // segment STANDALONE ahead of the first chunk instead
+  // (control_plane_protocol.md §8.12: the receiver holds a chunk into a
+  // segment it has not yet installed), so it never sets this.  Never set
+  // alongside `inline`, which names no segment -- doing so is a
+  // ContractViolation.
+  InstallSegment install = 6;
+  // The channels of this chunk that are `OpenExport.filter`'s output,
+  // a subset of `channels`; every other channel is the file's own.  Always
+  // empty when the export has no filter.  A chunk breaking either rule is a
+  // host error the plugin refuses with INVALID_ARGUMENT.
+  // Additive at `1.0`.
+  repeated uint32 filtered_channels = 7;
+}
+
+message FinishExport {
+  string handle = 1;
+}
+
+message AbortExport {
+  string handle = 1;
+}
+
+message ExportOpened {
+  string handle = 1;                // names this export for subsequent chunks
+}
+
+message ChunkWritten {
+  string handle = 1;
+  uint64 total_bytes = 2;           // authoritative bytes consumed this chunk
+}
+
+message ExportDone {
+  string handle = 1;
+}
+
+// ---- Plugin overlays ----
+//
+// A plugin pushes typed draw lists (UNSOLICITED, the panel-patch idiom:
+// full replacement per overlay id, last-write-wins); the host converts them
+// into its internal overlay vocabulary and every view materializes them.
+// Geometry rides the OVERLAY segment (purpose 'O', plugin-RW — distinct from
+// the panel segment so drag-rate geometry writes can never tear a
+// concurrently-decoded panel PNG) or inline bytes for small payloads.
+//
+// COMPILE-FROM-ROI READY: all geometry is ZYX DOUBLES; string
+// ids map 1:1 to region ids; OverlayTransform/OverlayStyle are sub-messages
+// so the v0.8.0 ROI reconciliation appends handle-sets, behaviors, and style
+// extensions under new field numbers WITHOUT touching what ships here.
+//
+// proto3-default ergonomics: absent sub-messages/fields mean "the default
+// look" — identity transform, white opaque, visible (note `hidden`, not
+// `visible`, so the zero value is the common case), thickness/size 0 =>
+// the host default.
+
+message OverlayUpdate {
+  string overlay_id = 1;          // manifest-declared; host namespaces per plugin
+  repeated OverlayItem items = 2; // FULL replacement for this overlay id
+  uint64 revision = 3;            // monotonic per overlay across live + control lanes
+}
+
+message OverlayRemove {
+  string overlay_id = 1;
+  uint64 revision = 2;            // ordered with OverlayUpdate; never resurrect stale live state
+}
+
+message OverlayItem {
+  string item_id = 1;
+  OverlayTransform transform = 2;
+  OverlayStyle style = 3;
+  uint64 geometry_version = 4;    // bump to force a geometry re-upload
+  oneof geometry {
+    OverlayLineSet line_set = 5;
+    OverlayMarker marker = 6;
+    OverlayText text = 7;
+    OverlayMesh mesh = 8;
+    OverlayLabelVolume label_volume = 9;
+  }
+}
+
+message OverlayTransform {
+  // "voxel" | "world" ("" => world).  The voxel frame is the dataset's LEVEL-0
+  // lattice: index (z, y, x) names the level-0 voxel at that position, whatever
+  // pyramid level the pane happens to be drawing or the plugin happened to read.
+  // A plugin that computed geometry at level L converts it to level 0
+  // before it sends (control_plane_protocol.md §8.11's edge map); the one
+  // field that could say "these are level-L voxels", `scale_zyx`, is exactly
+  // the field a label volume's definition rejects (`OverlayLabelVolume`).
+  string frame = 1;
+  repeated double position_zyx = 2;   // empty => origin
+  repeated double rotation_xyzw = 3;  // quaternion; empty => identity
+  repeated double scale_zyx = 4;      // empty => unit
+  string scale_mode = 5;              // "world" | "screen_constant" ("" => world)
+}
+
+message OverlayStyle {
+  repeated uint32 color_rgba = 1;  // 0-255 each; empty => white opaque
+  // Line width in screen px in the 3D pane; 0 => host default (1.0).  In the
+  // 2D panes a pixel is a VOXEL (the overlay layer is on the level-0 lattice
+  // and follows the zoom), as it is for `OverlayMarker.size_px` there
+  // (control_plane_protocol.md §8.5).
+  double thickness = 2;
+  double opacity = 3;              // 0 => opaque (use `hidden` to hide)
+  bool hidden = 4;                 // zero value == visible (the common case)
+  bool depth_test = 5;
+  // Orders label volumes only, where one drawn later covers the one before:
+  // higher draws later, so on top, and equal priorities go by the order of
+  // their overlays, in 3D as in 2D.  Other items ignore it.
+  int32 draw_priority = 6;
+  // v0.8.0 ROI reconciliation appends handle/behavior/style extensions here.
+}
+
+// Typed geometry bytes: a SegmentRef into the OVERLAY segment (purpose 'O')
+// or small inline bytes.  `shape` is the array shape (e.g. N,3); `dtype`
+// DTYPE_F64 for positions.  The host bounds-checks segment refs before
+// consuming and rejects refs into any other segment (purpose discipline).
+message GeomBuffer {
+  oneof source {
+    SegmentRef segment = 1;
+    bytes inline = 2;
+  }
+  repeated uint32 shape = 3;
+  DType dtype = 4;
+}
+
+// Polyline geometry in `transform.frame`, placed by `transform.position_zyx`;
+// rotation and scale do not apply (nor to a marker).  Drawn in the 3D pane
+// at `style.thickness` px, and in the 2D panes PROJECTED into every slice:
+// a segment with both endpoints in the slice is solid, any other is dashed
+// (control_plane_protocol.md §8.5) -- a curve has no section to draw.
+// "loop" closes the polyline; `colors_rgba` colours per vertex, a dash
+// taking its segment's start vertex.
+message OverlayLineSet {
+  GeomBuffer positions_zyx = 1;  // (N, 3) — a polyline, loop or pairs per `topology`
+  // "" or "polyline" => an open polyline through every vertex, in order;
+  // "loop" closes it; "segments" => independent vertex pairs.
+  string topology = 2;
+  GeomBuffer colors_rgba = 3;    // optional (N, 4) u8 per-vertex colors
+}
+
+message OverlayMarker {
+  GeomBuffer positions_zyx = 1;  // (N, 3)
+  // Diameter: screen-constant px in the 3D pane, VOXELS in the 2D panes
+  // (as `OverlayStyle.thickness` is there); 0 => host default (6.0).
+  double size_px = 2;
+  string shape = 3;              // "disc" | "square" ("" => disc)
+}
+
+// A label at a point.  `anchor_zyx` is in `transform.frame` -- a level-0
+// voxel under "voxel", exactly as a marker's positions are -- and the REST of
+// the transform does not apply: a label has no extent to scale or rotate and
+// no position of its own, and it is drawn at `size_px` screen pixels whatever
+// `scale_mode` says.  Colour and depth cue come from `style`.  The 3D pane
+// draws it beside vizi's own annotation labels; the 2D panes draw no text at
+// 1.0 (control_plane_protocol.md §8.5).
+message OverlayText {
+  string text = 1;
+  repeated double anchor_zyx = 2;  // empty => origin
+  double size_px = 3;              // 0 => host default (12.0)
+}
+
+// A unit primitive placed by `transform`: `position_zyx` (in `frame`) is its
+// centre and `scale_zyx[0]` its size in WORLD units, isotropic -- a sphere
+// stays round under an anisotropic display -- so only the first scale is
+// read, and `rotation` and `scale_mode` do not apply at 1.0.  The size is the
+// unit primitive's: for "sphere" the RADIUS (the unit sphere has radius 1),
+// for "cube" the EDGE (the unit cube spans -0.5..0.5).  The 3D pane draws it
+// with vizi's own gizmos; the 2D panes draw no mesh at 1.0.  "explicit"
+// vertices are refused by the host as a wire error -- deferred, not silent.
+message OverlayMesh {
+  string geometry = 1;  // "sphere" | "cube" ("" => cube); EXPLICIT verts deferred
+}
+
+// A dense per-voxel label volume — segmentation's natural output.
+// Composites in BOTH the 2D views and the native 3D categorical pass; the
+// 3D pass follows the renderer-selected pyramid level with nearest
+// decimation, so labels finer than that factor can drop out while zoomed
+// out and return as the selected level changes.
+// `labels` is (Z,Y,X) label ids (DTYPE_U8 | DTYPE_U16); `colormap` is a
+// (256,4) u8 RGBA LUT.  Labels are CATEGORICAL — nearest sampling only,
+// never interpolated.  `t` scopes display to one timepoint (proto3
+// presence); absent => shown at every t.
+//
+// A LABEL VOLUME IS A VOXEL SELECTION on the dataset's level-0 lattice, and
+// that is the definition, not a validation: `transform.frame` is
+// "voxel", `scale_zyx` unit in "world" mode, `rotation_xyzw` identity,
+// `position_zyx` INTEGER voxels placing the bbox-tight volume's origin, and
+// the whole box (position plus the labels' shape, zeros included) inside
+// the dataset.  An item that is not one is refused at the PUSH -- the whole
+// `OverlayUpdate` is not applied and the plugin is told which rule, on
+// `ContractViolation.where = VIOLATION_SITE_OVERLAY_ITEM_REFUSED` -- and
+// refused again by CompileLabelVolume with a `host_error`, which cannot rely
+// on the push having been checked (§5.3: a request drains ahead of the push
+// it repeats).  The box can only be checked while a dataset is open; a push
+// with none open is applied unchecked and the compile refuses it NOT_FOUND.
+// Display and compile therefore agree on what the item is; the one thing
+// that displays and does NOT compile is inline geometry, which is the
+// compile's TRANSPORT rule (no voxel bytes on the control plane), not part
+// of the definition -- send it segment-backed if it will be committed.
+//
+// The bytes ride the overlay LOANED arena, sized by the manifest's
+// `segment_mib` (32 MiB default, 512 max) and never grown: a level-0
+// whole-volume segmentation of a large dataset does not fit the default,
+// so a label volume is bbox-tight, or the manifest declares the arena it
+// needs.  There is no representation for a coarser lattice -- `scale_zyx`
+// is exactly what the definition rejects (`OverlayTransform`).
+//
+// THE LUT RULE.  Row 0 is the background row and is looked up for label 0
+// only; a foreground label `id` (>= 1) is drawn with row `1 + (id - 1) mod
+// 255`, so ids 1..255 use rows 1..255 directly and ids above 255 wrap onto
+// the foreground rows with period 255 — NEVER onto row 0.  (An earlier rule,
+// `id mod 256`, put label 256 on the background row: invisible in both views
+// and compiled with `visible = false`.)  Row 0's alpha is the
+// background's, conventionally 0.  A row's alpha is the ROW's -- it is shared
+// by every id that maps to it -- and the compile (§8.8) persists it as the
+// region's `visible` unless `label_visible` names that id.  It was documented
+// as a "per-label visibility", which is false above 255: hiding label 1 also
+// hid label 256, so 94 of a 302-object segmentation could not be toggled
+// independently.
+message OverlayLabelVolume {
+  GeomBuffer labels = 1;    // (Z, Y, X)
+  GeomBuffer colormap = 2;  // (256, 4) u8 RGBA
+  optional uint32 t = 3;
+  // Optional names, KEYED BY LABEL ID — not by LUT row, so two labels that
+  // share a row (id 1 and id 256) keep their own names.  Unnamed labels
+  // compile to "Label <id>"; a name for id 0 is ignored (background has no
+  // region).  1.0: retyped in place from a 256-entry `repeated string`
+  // indexed by LUT row.
+  map<uint32, string> label_names = 4;
+  // Optional per-label visibility for the COMPILE, keyed by label id, for the
+  // same reason `label_names` is: a LUT row is shared by ids differing by 255,
+  // so a row's alpha cannot say "hide 260 but not 5".  Absent for an id, that
+  // id falls back to its row's alpha -- exact for 1..255, and what a plugin
+  // with no aliasing already relies on.
+  //
+  // This governs the compiled REGION (its annotation entry), not the label
+  // volume's voxels: those are painted straight from the LUT by the GPU, and a
+  // 256-row LUT cannot express per-label anything above 255.  The two are
+  // different visuals, so they are allowed to differ -- see §8.8.
+  map<uint32, bool> label_visible = 5;
+}
+
+// ---- Chunked overlays (control_plane_protocol.md §5.7, §8.5) ----
+//
+// A dense segmentation of a whole MOVIE does not fit any arena, and a plugin
+// cannot restate it as one `OverlayUpdate`: the wire's unit of overlay state
+// is the whole overlay.  A CHUNKED overlay (manifest `chunked: true`) changes
+// the unit to ONE LABEL VOLUME AT (level, t) -- never smaller than a volume,
+// because volumes fit in memory and the time series is what does not -- and
+// each such volume is coalescing state under its own key.  The HOST names the
+// (level, t) pairs it wants and does not hold (`ChunksWanted`); the plugin
+// answers with `OverlayChunk`s; a chunk the host did not ask for is dropped at
+// receipt, counted, and its loan released.  The key space is therefore the
+// host's own (§5.4's ledger case) and no plugin can exhaust it.
+//
+// The bytes ride the overlay's LOANED arena exactly as a label volume's do,
+// but that arena is HOST-SIZED FROM THE DATASET at open -- one level-0 volume
+// plus one level-1 volume of u16 -- retired and re-granted when the dataset
+// changes (§8.12), not sized by `segment_mib`; §9's growth ceiling does not
+// apply to it and the session ceiling does.  A chunked overlay never
+// compiles (§8.8): the "masks too big to fit" scheme is not this feature.
+
+// Host -> plugin, coalescing per overlay.  THE WHOLE SET the host wants to
+// hold, held chunks included, in the host's priority order, restated
+// whenever it changes; an empty list means nothing is wanted (no dataset
+// open, the overlay unavailable for it, or a dataset change -- the host
+// restates the set empty before it re-grants the arena, and names nothing
+// until the new arena is installed).  At most 8 entries (§9).  A plugin
+// serves each want once per continuous membership of the set, and again
+// when its results change; a chunk whose want leaves the set may be
+// discarded by the host and is asked for again if it returns.
+message ChunksWanted {
+  string overlay_id = 1;          // manifest-declared; a CHUNKED overlay
+  repeated ChunkWant wants = 2;
+}
+
+// One (level, t) volume.  `t` is ABSENT for a `time: "static"` overlay -- one
+// volume per level for every t -- and present for `per_t`.  There is no crop:
+// a plugin answers bbox-tight, and the field can be added later.
+message ChunkWant {
+  uint32 level = 1;               // pyramid level; the plugin publishes ON that lattice
+  optional uint32 t = 2;
+}
+
+// Plugin -> host, coalescing per (overlay_id, level, t) (§5.4).  ONE bbox-
+// tight label volume on the LEVEL-L LATTICE -- the coarser lattice
+// `OverlayLabelVolume` cannot express, legal here because the host chose the
+// level -- with `position_zyx` in level-L voxel indices placing the array's
+// origin and the whole box inside that level's shape.  `labels` absent or
+// zero-length means THE CHUNK IS EMPTY, which is a state, not a removal.
+// Labels are DTYPE_U8 or DTYPE_U16 only: more than 2^16 ids is refused, so
+// the label table below always fits §9's bound.  The LUT, names, visibility
+// and style are NOT here -- they are the overlay's (`OverlayLabelTable`), so
+// a chunk is labels and a position and nothing else.
+//
+// Segment-backed as a rule (inline is accepted under §9's 8 MiB, as for any
+// GeomBuffer).  A chunk the host did not name in its current `ChunksWanted`
+// is dropped and counted; one it did name but cannot apply -- an overlay that
+// is not chunked, a level the dataset does not have, a box outside the
+// level's shape, a dtype that is not u8/u16, a ref into the wrong segment --
+// is refused on `ContractViolation.where = VIOLATION_SITE_OVERLAY_CHUNK_REFUSED`.
+// Every disposition releases the loan (§5.6).  An SDK that cannot allocate
+// the arena for a WANTED chunk waits for the next `ReleaseLoan` and retries
+// rather than failing the push: the host asked, and will release.
+message OverlayChunk {
+  string overlay_id = 1;
+  uint32 level = 2;
+  optional uint32 t = 3;          // absent only for a `static` overlay
+  GeomBuffer labels = 4;          // (Z, Y, X) u8 | u16; absent => empty chunk
+  repeated uint32 position_zyx = 5; // level-L indices of labels[0,0,0]; empty => origin
+}
+
+// Plugin -> host, coalescing per overlay: what `OverlayLabelVolume` carries
+// per item, once per overlay -- the LUT rule, the by-id keying and the
+// visibility semantics are that message's (§8.8) and are not restated here.
+// Until a table arrives the host draws chunks with a default LUT and no
+// names.  `style` is the overlay's `OverlayStyle` (opacity, hidden,
+// draw_priority; the rest do not apply to a label volume).
+message OverlayLabelTable {
+  string overlay_id = 1;
+  GeomBuffer colormap = 2;        // (256, 4) u8 RGBA
+  map<uint32, string> label_names = 3;
+  map<uint32, bool> label_visible = 4;
+  OverlayStyle style = 5;
+}
+
+// ---- Data access: plugin-initiated view/voxel requests ----
+//
+// The protocol's first WHO-INITIATES INVERSION: a plugin asks the host.
+// Requests ride the session stream as PluginMsg arms with PLUGIN-chosen ids
+// (the SDK uses "q<n>"); the host answers with a ONE-WAY HostMsg echoing the
+// id — sent outside the host's single-in-flight request slot, so a reply can
+// leave while the triggering InvokeCommand is still pending.  Bulk voxels
+// never ride gRPC: the host writes them into the DATA segment (purpose 'V',
+// host-written / plugin-read — the export deposit's direction, plugin-pulled)
+// and the reply carries only a SegmentRef.  Gated on the manifest
+// `data_access` permission; a request the host cannot serve (no permission,
+// no dataset, out of bounds, backpressure) yields `host_error` — NEVER
+// silence, because a plugin thread is blocked on the reply.
+
+message GetViewState {}
+
+// Read a (Z,Y,X) volume of the open dataset at EXPLICIT indices
+// (deterministic under user scrubbing; ViewState reports the current ones).
+// The optional ROI sub-box is in the coordinates OF THE REQUESTED LEVEL,
+// min inclusive / max EXCLUSIVE (numpy slice convention); empty => full
+// extent.  The host slices before writing, so the reply descriptor's
+// shape_zyx is the ROI's shape.
+message ReadDataVolume {
+  uint32 t = 1;
+  uint32 c = 2;
+  uint32 level = 3;                 // pyramid level; 0 = full resolution
+  repeated uint32 roi_min_zyx = 4;  // inclusive; empty => origin
+  repeated uint32 roi_max_zyx = 5;  // exclusive; empty => level shape
+  // The file's own voxels, whatever the person chose to share with plugins:
+  // with "Plugins See Filtered Data" on, a read is otherwise the
+  // filter's output.  The reply then carries no `filter` -- these voxels are
+  // not a filter's -- and `ViewState.filter` still says what the views show,
+  // for a plugin that records it.  Additive at `1.0`.
+  bool raw = 6;
+}
+
+// One pyramid level's geometry, for choosing a read resolution.
+message LevelInfo {
+  uint32 level = 1;
+  repeated uint32 shape_zyx = 2;
+}
+
+// The active view/selection snapshot.  t/z/c/level are the REQUESTED
+// navigation state (what the user last set — deterministic, unlike "what
+// frame happens to be decoded").  The crop box is ZYX in LEVEL-0 voxel
+// coords, min inclusive / max EXCLUSIVE -- the INDEX form.
+//
+// Geometry.crop carries the SAME BOX in the EDGE form (EdgeBox, doubles), and
+// the two are not interchangeable numbers.  Convert:
+//     edge.lo = min - 0.5        min = ceil(edge.lo)
+//     edge.hi = max - 0.5        max = floor(edge.hi) + 1
+// Prefer Geometry.crop: it is exact, it converts across pyramid levels, and
+// these two fields cannot express a bound that is not on a pixel boundary.
+//
+// It is a RENDER clip: reads ALWAYS return uncropped data and the plugin
+// applies the box itself if it wants to.  Deliberately -- the crop bounds what
+// an INTERACTION MEANS (which content is relevant to a click), never what a
+// plugin may read.  An affine transform needs samples the crop excludes, and a
+// plugin reasoning about geometry outside the dataset entirely is making its own
+// call.  vizi says what is relevant; it does not say what is permitted
+// (control_plane_protocol.md §8.11).
+message ViewState {
+  uint32 t = 1;
+  uint32 z = 2;
+  // DEPRECATED, and ALWAYS 0.  vizi has no active-channel concept and no C
+  // picker: a channel is not a place you navigate to, and nothing can move
+  // this field.
+  //
+  // Read `visible_channels`.  Retained rather than reserved because removing a
+  // field SDKs already generate from is a coordinated change for a value
+  // that costs one varint; a reader that wants one index should take
+  // `visible_channels[0]`, which is at least true.
+  uint32 c = 3 [deprecated = true];
+  uint32 level = 4;                 // current 3D volume pyramid level
+  repeated uint32 shape_tczyx = 5;  // canonical vizi axis order; 5 elements
+  DType dtype = 6;
+  bool has_crop = 7;                // false => ignore the crop fields
+  repeated uint32 crop_min_zyx = 8;
+  repeated uint32 crop_max_zyx = 9;
+  bool mip = 10;                    // 2D view is in Z-MIP mode
+  repeated LevelInfo levels = 11;   // available levels (always >= level 0)
+  string dataset_uri = 12;          // source path/URI; empty when unavailable
+  string dataset_name = 13;         // host display name
+  uint64 open_generation = 14;      // changes on every successful dataset open
+  // Every channel index ENABLED FOR DISPLAY, ascending; a solo narrows it to
+  // one.  Host-wide, not per pane: this message carries no view id, so it
+  // cannot answer "what is THIS pane compositing" -- and the 3D pane composites
+  // at most 8 (`_NATIVE_MC_MAX`), logging when it truncates, so with more than
+  // eight enabled it shows a subset of this set while the 2D panes show all of
+  // it.  Said plainly because the previous wording, "every channel index the
+  // view composites right now", promised a per-pane answer the wire cannot
+  // carry.  The full set, unlike the E record's 16-bit mask
+  // (doorbell_E_input.md §1), which names channels >= 15 only through the
+  // pane epoch's `channels_high`.  Polled, like the rest of this message, so
+  // it can be a tick stale; the epoch is the authority for a tool.  Additive
+  // at 1.0.
+  repeated uint32 visible_channels = 15;
+
+  // The dataset's voxel pitch, in the shape `Geometry` (§8.11) publishes it:
+  // ZYX, 3 elements, empty when no dataset is open.  Host-wide and polled like
+  // the rest of this message, so it can be a tick stale; a TOOL reads the
+  // epoch's `Geometry`, which is exact to the record.  §8.7 sends a plugin with
+  // no tool HERE, and until `1.0` this was the one fact it did not carry, so an
+  // analysis plugin with a panel and no tool had to ask a person to type a
+  // pitch -- a number with no provenance, which is what `SpacingProvenance`
+  // exists to prevent.  Additive at `1.0`.
+  //
+  // PER AXIS: when the file records SOME axes' pitch and not others,
+  // the recorded axes carry it in `spacing_unit` and each unrecorded axis is
+  // NaN, with provenance FILE -- so a plugin scales what is known and leaves
+  // the rest in voxels.  `Geometry` keeps a finite pitch for the same file
+  // (a tool rebuilds physical space from it); the two agree whenever every
+  // axis or no axis is known.
+  repeated double spacing_zyx = 16;
+  string spacing_unit = 17;        // "um", or "" when no axis is known
+  // Whether `spacing_zyx` is a measurement: a plugin MUST NOT read
+  // DISPLAY_FALLBACK's values as one, nor a NaN axis.
+  SpacingProvenance spacing_provenance = 18;
+  // This plugin's folder for the open file: `plugins/<id>/` in the
+  // file's companion directory, where the host keeps region saves.  State a
+  // plugin keeps about ONE dataset -- a cache, a result, a per-file choice --
+  // goes here, and moves and dies with the dataset.  The host names it and
+  // does NOT create it: the plugin creates it when it first writes, so opening
+  // a file leaves nothing behind for plugins that store nothing.  Empty when
+  // the dataset has no local path (a remote or plugin URI, a demo dataset).
+  // Settings that are not about one file go in `VIZI_PLUGIN_SETTINGS_DIR`
+  // (`control_plane_protocol.md` §2.3).  Additive at `1.0`.
+  string file_state_dir = 19;
+  // The filter applied to what the views SHOW, absent when none.  It
+  // does not say what a read returns: a plugin's reads are the file's own
+  // unless the user shares the filter with plugins, and `DataVolume.filter`
+  // is the answer for each one.  Additive at `1.0`.
+  AppliedFilter filter = 20;
+  // The frame interval the host KNOWS, in `ReaderOpened`'s fields and with
+  // its rule: 0 / "" mean unknown, and a plugin MUST NOT read 0 as a
+  // measurement (a panel plugin could not emit time in seconds).  The
+  // interval is uniform when known; a tool reads the arranged `TimeMapping`,
+  // which also carries a non-uniform one.  Additive at `1.0`.
+  double time_increment = 21;
+  string time_unit = 22;           // "s", or "" when unknown
+  // The region the person has selected -- the Regions panel's current row,
+  // which a pick in the 3D view also sets -- or "" for none: how a
+  // plugin that shows region data knows which region to show.
+  string selected_region_id = 23;
+  // Which image of `dataset_uri` is open, as the reader's `SeriesEntry.id`;
+  // ABSENT when the file holds one image.  `optional`, as
+  // `OpenReader.series` is, because presence is the signal: "" may be a
+  // reader's id.  The identity of an open dataset is the
+  // pair: two images of one file share a URI.  Additive at `1.0`.
+  optional string dataset_series = 24;
+  // Every channel of the open dataset, in index order, each with its name and
+  // where the name came from: what a panel plugin labels a trace with,
+  // the same names the person sees.  Empty with no dataset open.  Additive at
+  // `1.0`.
+  repeated ChannelInfo channels = 25;
+}
+
+// Where voxels a plugin receives came from, when they are NOT the file's own:
+// the processing stage they passed through, as Apply Filter applied
+// it.  Absent wherever it could appear means the file's own voxels.  It says
+// what produced THESE voxels, not what is applied in general: a read of a
+// channel the stage does not rewrite, of a level it does not run at, or of a
+// timepoint it refused, failed or ran out of time on is the file's own, and
+// carries none.  So a plugin can refuse to analyse its own stage's output, or
+// record what it analysed.  Additive at `1.0`.
+message AppliedFilter {
+  string plugin_id = 1;
+  string plugin_version = 2;          // the manifest's `version`
+  string stage_id = 3;
+  map<string, Value> params = 4;      // every declared key, as the stage received it
+  repeated uint32 channels = 5;       // the channels the stage rewrites, ascending
+}
+
+// Reply to ReadDataVolume: a descriptor into the DATA segment + the indices
+// actually served (echoed so a raced regrant/retry is self-describing).
+message DataVolume {
+  SegmentRef segment = 1;  // host-written; plugin bounds-checks before use
+  uint32 t = 2;
+  uint32 c = 3;
+  uint32 level = 4;
+  uint64 open_generation = 5;
+  // The RIDE-ALONG (control_plane_protocol.md §5.5, §8.12).  Present on the
+  // first transfer into a segment and on a ring re-grant; absent otherwise.
+  // Embedded rather than sent as a preceding message so that "installed before
+  // the descriptor is read" is STRUCTURAL: a receiver cannot observe the
+  // descriptor without the installation, so the two cannot be reordered, split
+  // by a queue, or half-delivered.  Apply the install, THEN read `segment`.
+  InstallSegment install = 6;
+  // Present when these voxels are a filter's output; absent when they
+  // are the file's own.  Only with Tools -> Apply Filter -> "Plugins See
+  // Filtered Data" checked is a read ever served filtered.  Additive at `1.0`.
+  AppliedFilter filter = 7;
+}
+
+// The SDK copied one host DATA deposit into plugin-owned memory, so the host
+// may reclaim this exact ring reservation. This is an unsolicited push:
+// losing it leaks capacity until session teardown but can never permit reuse
+// of live bytes.
+message ReleaseDeposit {
+  uint64 segment_id = 1;
+  // SEGMENT-relative, byte-for-byte the value the descriptor carried.  Never
+  // region-relative: copying the number back unchanged has no arithmetic to get
+  // wrong, whereas a subtraction a sender forgets yields a SMALL offset that is
+  // still a valid one, so the release lands on live bytes and corrupts an
+  // allocator silently (control_plane_protocol.md §8.12).
+  uint64 offset = 2;
+  uint64 len = 3;                 // the REQUESTED length, never the padded one
+  // Which LOANED region within the segment.  Defaults to 0, which is the
+  // one-ring-per-segment case.  Only valid
+  // for a region whose `producer` is HOST; naming a PLUGIN-produced one is a
+  // ContractViolation, since that region is released with ReleaseLoan.
+  //
+  // REDUNDANT WITH `offset` ON PURPOSE: the receiver checks that `offset` falls
+  // inside this region, so a mistargeted release is DETECTED rather than
+  // applied.  A disagreement is a ContractViolation.
+  uint32 region = 4;
+}
+
+// Read one native mask annotation's bbox-local membership. The reply
+// uses the existing host-written DATA segment ('V'); shape and dtype live in
+// SegmentRef, and voxel bytes never travel inline.
+message ReadMaskVoxels {
+  string region_id = 1;
+}
+
+message MaskVoxels {
+  SegmentRef segment = 1;
+  repeated uint32 origin_zyx = 2;
+  string region_id = 3;
+  uint64 open_generation = 4;
+}
+
+// Which level-0 voxels a region covers at frame `t` (§8.7), computed by
+// the host exactly as it measures and draws: the shape posed at `t`, through
+// its parent chain, rasterized by its inclusion mode.  Any region `GetRois`
+// lists, of any kind -- a mask answers its stored membership, which the host
+// holds static across `t`.  Gated on `data_access`.
+message ReadRoiInclusion {
+  string region_id = 1;
+  int32 t = 2;
+  // A level-0 box to clip the answer to, as ReadDataVolume's: min inclusive,
+  // max exclusive, both empty => the whole dataset.  A tracker watching part
+  // of a large region asks for only that part.
+  repeated uint32 roi_min_zyx = 3;
+  repeated uint32 roi_max_zyx = 4;
+}
+
+// The answer, as `MaskVoxels` answers: a bbox-local U8 (0/1) volume in the DATA
+// segment, whose shape is `segment.shape_zyx`, placed at `origin_zyx`, clipped
+// to the dataset.  `present` false means the region does not exist at `t` (a
+// segment of its domain hides it); `voxel_count` 0 with `present` true means it
+// exists and covers no voxel of the dataset.  Either way no segment is sent.
+message RoiInclusion {
+  SegmentRef segment = 1;
+  repeated uint32 origin_zyx = 2;
+  string region_id = 3;
+  int32 t = 4;
+  uint64 open_generation = 5;
+  bool present = 6;
+  uint64 voxel_count = 7; // exact count of included voxels
+}
+
+// ---- first-class native ROI contribution / read-back ----
+
+message RoiStyle {
+  // Empty means the host's next default color.
+  string color = 1; // CSS #RRGGBB
+  // Absent means the native default (visible). Presence lets a plugin replace
+  // a prior contribution with an explicitly hidden region.
+  optional bool visible = 2;
+}
+
+message RoiContribution {
+  // Stable only within the contributing plugin's namespace. Re-emitting this
+  // id replaces that plugin's existing region; it can never name a user
+  // region or another plugin's contribution.
+  string contrib_id = 1;
+  pois_math.v1.Roi roi = 2;
+  string name = 3; // empty means a host-generated name
+  RoiStyle style = 4; // absent means host defaults
+}
+
+message ContributeRois {
+  repeated RoiContribution rois = 1;
+  // False = upsert. True additionally removes this plugin's prior regions
+  // whose contrib_ids are absent from this batch.
+  bool replace_all = 2;
+}
+
+// The pose window a reply should carry (control_plane_protocol.md §8.8).
+//
+// With NEITHER field the reply is unchanged: one `Roi` per region, POSED at the
+// frame on screen and its pose cleared -- the shape this request has always
+// had.  With a window the reply is the REST form instead, its dense pose rows
+// clipped to `[pose_t_start, pose_t_end]`, which is how a plugin reads back a
+// pose it contributed without asking for a table that cannot fit in a message.
+// A reply past §9's message ceiling is refused `OUT_OF_BOUNDS`, naming its size
+// and the limit -- never narrowed to a window other than the one asked.
+message GetRois {
+  optional int32 pose_t_start = 1;
+  optional int32 pose_t_end = 2;
+  // Only these regions, so a plugin told which regions changed re-reads
+  // those alone; empty = every region.  An id that does not exist is left
+  // out of the reply, not an error: the region may have been deleted since.
+  repeated string region_ids = 3;
+}
+
+// Add or correct dense pose rows on regions this plugin already contributed
+// (§8.8).  `ContributeRois` takes the WHOLE table, so a tracker that
+// extends its regions as it goes re-sends every pose of every region on every
+// contribution; §9's ceiling note deferred this mechanism until the case
+// arrived, and it has.
+message RoiPoseExtension {
+  string contrib_id = 1;
+  int32 t_start = 2;  // first frame this extension covers
+  uint32 span = 3;    // frames covered; the three lengths below are checked against it
+  // Same layout and the same density rule as `Roi`'s: 3*span, 3*span, 6*span.
+  // A component is EMPTY or complete, and the set present must equal the set
+  // the region already carries -- an extension cannot introduce a component
+  // for part of a domain, because "the creator fills every frame" is what lets
+  // a reader index a row without asking whether it exists.
+  repeated double pose_translation = 4;
+  repeated double pose_rotation = 5;
+  repeated double pose_stretch = 6;
+}
+
+message ExtendRoiPoses {
+  repeated RoiPoseExtension extensions = 1;
+}
+
+message RoiPosesExtended {
+  uint32 region_count = 1;
+  uint32 frame_count = 2;  // rows written, summed over the batch
+}
+
+message RoiRecord {
+  string region_id = 1; // host-stable native region identity
+  string origin = 2; // "user" or "plugin:<plugin_id>"
+  string contrib_id = 3; // empty for user-origin regions
+  pois_math.v1.Roi roi = 4;
+  string name = 5;
+  RoiStyle style = 6;
+  // The region's FULL pose domain, on every record of a region that has
+  // one, windowed or not.  `roi.t_start`/`t_end` describe the rows
+  // returned, so a record holds the whole pose exactly when the two agree;
+  // contributing a windowed `Roi` back otherwise drops every frame outside the
+  // window.  An unwindowed read carries it so a plugin can size a window first.
+  optional int32 pose_domain_t_start = 7;
+  optional int32 pose_domain_t_end = 8;
+  // Changes exactly when the region does, and is never reused: what a
+  // plugin compares, against `RegionsChanged`, to know it is current.  0 from
+  // a host that does not track revisions.
+  uint64 revision = 9;
+  // A digest of what decides which voxels the region covers -- its geometry
+  // and placement, and its parents' -- so it does not change on a rename, a
+  // recolour or a visibility toggle.  With `name`, what a plugin keys
+  // the data it SAVES on: a plugin is responsible for what it computed, and
+  // this says whether a region is still the one it computed from, across
+  // sessions, where `revision` is only good within one.  16 hex characters.
+  string content_hash = 10;
+  // The plugin that shapes this region's TYPE -- the one whose manifest
+  // `region_types` declares `roi.type_name` (§8.8) -- or "" for a type
+  // the host enacts itself.  A copy the person made of a region keeps its
+  // type, so this need not be the plugin in `origin`.
+  string type_owner = 11;
+}
+
+// §8.7, subscription "view": where the person is looking, as state.
+// Sent once when the session starts and again whenever any field changes,
+// at most once per host pump tick (40 ms) -- a coalescing push, so a plugin
+// keeps the latest and a lost one costs nothing but latency.
+message ViewChanged {
+  uint64 open_generation = 1;       // 0 = no dataset open; a new value = a new dataset
+  uint32 t = 2;
+  uint32 z = 3;
+  repeated uint32 visible_channels = 4;  // ViewState's, ascending
+  string selected_region_id = 5;         // ViewState's; "" for none
+  // ViewState's `filter`: the filter applied to what the views show, absent
+  // for the file's own voxels.  A subscriber hears a filter applied or
+  // removed as it hears a scrub.  Additive at `1.0`.
+  AppliedFilter filter = 6;
+}
+
+// §8.7, subscription "regions": which regions changed, never their
+// geometry -- `GetRois{region_ids}` reads those.  Every change is reported,
+// the plugin's own contributions included; `origin` says whose it is.
+message RegionChange {
+  string region_id = 1;
+  uint64 revision = 2;              // RoiRecord.revision; 0 when deleted
+  string origin = 3;                // "user" or "plugin:<plugin_id>"; "" when deleted
+  bool deleted = 4;
+}
+
+// A DELTA against the last one the host sent, not whole state: a plugin that
+// folds pushes merges them per region, the newer entry winning -- a deletion
+// included.
+message RegionsChanged {
+  uint64 open_generation = 1;
+  // True on the first push of a session and after a dataset change: `changes`
+  // is then every region there is, and anything the plugin held before is void.
+  bool reset = 2;
+  repeated RegionChange changes = 3;
+}
+
+message RoiList {
+  repeated RoiRecord rois = 1;
+}
+
+message RoisContributed {
+  uint32 region_count = 1;
+}
+
+// A person editing the shape of a region whose TYPE this plugin shapes --
+// one of its manifest `region_types` (control_plane_protocol.md §8.8).
+// Carried by `shape_drag` (coalescing) and by `shape_commit` (one-shot); the
+// arm, not the body, says which.
+//
+// FULL STATE IN (pois_math spec.md §4): `move.roi` is the region's REST form
+// as it stood when the drag began, and every message carries it, so a plugin
+// can answer any one of them having seen none of the others -- which is what
+// makes it harmless that the wire does not order a coalescing push against a
+// one-shot one.  Coordinates are `move.roi`'s own (voxel-index ZYX, before
+// pose, placement frame and parent): the host has already undone those, and
+// has already projected the pointer onto the handle's declared DoF, so
+// `move.p1` is a point on the handle's rail, plane or free space.
+message ShapeEdit {
+  string region_id = 1;  // the host's id, as RoiRecord and RegionsChanged name it
+  string contrib_id = 2; // this plugin's id for the region; "" when it did not contribute it
+  string type_name = 3;  // == move.roi.type_name; one of this plugin's region_types
+  // Host-assigned per session: starts at 1, increases, never reused.  One
+  // drag is one gesture, pointer down to release; a spinbox edit is a drag of
+  // its own with no `shape_drag` before its `shape_commit`.
+  uint64 drag_id = 4;
+  // `shape_drag`: 1, 2, 3, ... within the drag, one per position sent.  0 on
+  // `shape_commit`, which is answered by `drag_id` alone.
+  uint32 seq = 5;
+  // roi, handle (a vertex index into roi.vertices), mode, p0 (the handle's
+  // position when the drag began), axis (the handle's drag axis), p1 (where
+  // the person has put it: on the handle's DoF, within its declared extents).
+  pois_math.v1.ConstrainMoveRequest move = 6;
+}
+
+// The plugin's shape for a `ShapeEdit`: where EVERY vertex of the region now
+// is.  Topology, directions and everything else in the Roi are unchanged; a
+// plugin that needs to change them contributes the region again afterwards.
+message ShapeResult {
+  uint64 drag_id = 1;
+  uint32 seq = 2; // `shape_proposal`: the `seq` answered.  0 on `shape_answer`.
+  // One per `move.roi.vertices`, in order, in the same rest coordinates;
+  // every component finite.  Empty when `resolution` is REJECTED.
+  repeated pois_math.v1.Vec3 positions = 3;
+  // OK; CLAMPED (the plugin moved the handle somewhere other than `p1` --
+  // informational, the positions are still the shape); REJECTED (no shape for
+  // this position: a proposal leaves the last one on screen, an answer
+  // reverts the edit).
+  pois_math.v1.Resolution resolution = 4;
+  string message = 5; // why, for the person, on REJECTED; never parsed
+}
+
+message ShapeEditEnded {
+  uint64 drag_id = 1;
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    COMMITTED = 1; // the answer's shape is the region's, as one undo step
+    REVERTED = 2;  // the region is as it was before the drag: the answer was
+                   // REJECTED, or refused by the host (`detail` says which rule)
+    CANCELLED = 3; // the edit stopped before any answer was kept: the person
+                   // cancelled, or the region or the dataset went away
+  }
+  Outcome outcome = 2;
+  string detail = 3; // for the plugin's log; never parsed
+}
+
+// Compile an already-written OVERLAY-segment label item into native mask
+// annotations. The small descriptor is repeated here because plugin requests
+// drain ahead of unsolicited overlay pushes; no voxel bytes are re-transferred.
+message CompileLabelVolume {
+  string overlay_id = 1; // manifest-declared overlay owning `item`
+  OverlayItem item = 2;  // must contain segment-backed label_volume geometry
+  bool replace_all = 3;  // same namespace-set semantics as ContributeRois
+}
+
+message LabelVolumeCompiled {
+  uint32 region_count = 1; // nonzero labels compiled by this request
+}
+
+// A plugin panel may ask the host to toggle one of that same plugin's
+// manifest-declared tools. `deactivate` selects the off transition;
+// activation is the proto3-default operation.
+message ActivateTool {
+  string tool_id = 1;
+  bool deactivate = 2;
+}
+
+message ToolActivationChanged {
+  string tool_id = 1;
+  bool active = 2;
+}
+
+// Ask the host to show a native single-file picker for a persistent named
+// slot. A populated slot is reused without prompting unless
+// force_reprompt is true. Gated on the existing data_access permission.
+message RequestAsset {
+  string slot = 1;
+  bool force_reprompt = 2;
+}
+
+// A clean cancellation sets declined and leaves path empty. Successful
+// imports are copied into the per-plugin asset store; size and SHA-256 are
+// recorded at import time and echoed here.
+message AssetResult {
+  string slot = 1;
+  string path = 2;
+  bool declined = 3;
+  uint64 size = 4;
+  string sha256 = 5;
+}
+
+// Ask the host for a path to WRITE, chosen by a person in the host's native
+// save dialog: folder browsing, the OS's conventions and its overwrite
+// prompt, which a plugin with no UI cannot show.  Same lifecycle as
+// RequestAsset (§8.9): one picker per session at a time, the command deadline
+// held while it is up.  No permission, as for an exporter: the person picks
+// the path.  The host creates nothing; the plugin writes the file.
+message RequestSavePath {
+  string suggested_name = 1;  // a file name offered in the dialog, no directory; may be empty
+  string extension = 2;       // without the leading dot, e.g. "csv" or "ome.tif"; "" for any.
+                              // Appended when the name does not end in it; anything but
+                              // dot-separated name parts is INVALID_ARGUMENT
+  string title = 3;           // what the dialog says after the plugin's name; may be empty
+}
+
+// The table vizi renders a named colormap with: what a
+// `colormap_picker` names, so a plugin drawing its own image colours it the
+// way vizi would.  Built-in and the user's own colormaps alike; an unknown
+// name is `host_error{NOT_FOUND}`.  No permission: a colormap is not data.
+message GetColormap {
+  string name = 1;
+}
+
+// ---- set-view (control_plane_protocol.md §8.15) ----
+//
+// A plugin moves the person's view only as the answer to something the person
+// did to that plugin: a `cause` the host minted for an interaction with a
+// widget declared `moves_view`, or a tool's FIRE interaction.  The targets are
+// a closed, enumerated list; one request applies whole or not at all.
+
+// A tool's FIRE interaction as a cause: the `E` record's `tool` activation
+// handle and `interaction` (doorbell_E_input.md §1).
+message ToolCause {
+  uint32 tool = 1;
+  uint32 interaction = 2;
+}
+
+// Aim the camera at a level-0 voxel.  Not a matrix: the host works out the
+// pose for its current camera mode.
+message LookAt {
+  repeated double target_zyx = 1;     // 3 values, voxel-centred (§8.11)
+  double fit_extent = 2;              // voxels to fit in view; 0 keeps the distance
+  repeated double direction_zyx = 3;  // viewing direction; empty keeps it
+}
+
+message OrbitPoint {
+  repeated double zyx = 1;            // 3 values, voxel-centred
+}
+
+message ViewRequest {
+  // Exactly one of the two causes.
+  uint64 cause = 1;                   // from InvokeCommand.cause
+  ToolCause tool_cause = 2;
+  // Answer the cause and move nothing: no target may be set.
+  bool decline = 3;
+  optional uint32 t = 4;
+  optional uint32 z = 5;
+  optional string select_region = 6;  // as a single click on the region
+  optional string frame_region = 7;   // as choosing the region in its list
+  LookAt look_at = 8;
+  OrbitPoint orbit_point = 9;
+}
+
+enum ViewOutcome {
+  VIEW_OUTCOME_UNSPECIFIED = 0;
+  VIEW_OUTCOME_APPLIED = 1;
+  VIEW_OUTCOME_DECLINED = 2;
+  VIEW_OUTCOME_REFUSED = 3;
+}
+
+enum ViewRefusal {
+  VIEW_REFUSAL_NONE = 0;
+  VIEW_REFUSAL_NOT_ENABLED = 1;       // the person has not turned on "Let <plugin> move the view"
+  VIEW_REFUSAL_NOT_DECLARED = 2;      // a target, or a cause's surface, the manifest does not declare
+  VIEW_REFUSAL_STALE = 3;             // the cause is older than 2 s
+  VIEW_REFUSAL_SUPERSEDED = 4;        // the person has since changed what it would change
+  VIEW_REFUSAL_CONSUMED = 5;          // the cause was already answered by a different request
+  VIEW_REFUSAL_UNKNOWN_REGION = 6;
+  VIEW_REFUSAL_OUT_OF_RANGE = 7;      // a t, z or point outside the open dataset
+  VIEW_REFUSAL_DATASET_CHANGED = 8;   // a different dataset since the cause
+  VIEW_REFUSAL_FOLLOW_ACTIVE = 9;     // a Follow owns the target
+  VIEW_REFUSAL_EXPORT_ACTIVE = 10;    // a movie export owns t and the camera
+  VIEW_REFUSAL_UNSUPPORTED = 11;      // this host does not move views
+  VIEW_REFUSAL_INVALID = 12;          // no cause, two causes, a decline with targets, or a
+                                      // look_at / orbit_point value that is not 3 finite
+                                      // numbers (or a negative fit_extent)
+}
+
+message ViewRequestResult {
+  uint64 cause = 1;                   // echoed, whichever the request named
+  ToolCause tool_cause = 2;
+  ViewOutcome outcome = 3;
+  ViewRefusal reason = 4;             // NONE unless REFUSED
+  string detail = 5;                  // a sentence for a log
+}
+
+// ---- Follow (control_plane_protocol.md §8.15) ----
+//
+// Timed, plugin-driven movement the PERSON starts: the plugin offers, the
+// person presses Follow in the panel's first row, the plugin streams states,
+// and any input of the person's on a followed target ends the whole Follow.
+
+// Show (or, with an empty label, withdraw) the Follow button in the panel's
+// first row.  Panel state: kept for an unopened panel, shown when it opens.
+message OfferFollow {
+  string panel_id = 1;
+  string label = 2;  // what the button says after "Follow: "; "" withdraws
+}
+
+message FollowStarted {
+  uint64 follow_id = 1;          // fresh per start; names every state and the end
+  string panel_id = 2;
+  repeated string targets = 3;   // the panel's follow_targets
+  bool resumed = 4;              // started by Resume after the person took control
+}
+
+// Where the view should be now: whole state, the latest wins.  Targets as in
+// ViewRequest, from the Follow's `targets`; no cause.  A state that cannot
+// apply ends the Follow FOLLOW_END_INVALID.
+message FollowState {
+  uint64 follow_id = 1;
+  uint64 seq = 2;                // must rise; a state not above the last applied is ignored
+  optional uint32 t = 3;
+  optional uint32 z = 4;
+  optional string select_region = 5;
+  optional string frame_region = 6;
+  LookAt look_at = 7;
+  OrbitPoint orbit_point = 8;
+}
+
+// The plugin ends its own Follow ("the tour is done").
+message EndFollow {
+  uint64 follow_id = 1;
+}
+
+enum FollowEndReason {
+  FOLLOW_END_UNSPECIFIED = 0;
+  FOLLOW_END_STOPPED = 1;            // Stop, or the person turned the panel's switch off
+  FOLLOW_END_USER_TOOK_CONTROL = 2;  // the person's input on a followed target
+  FOLLOW_END_AUTOSPIN = 3;           // the person turned Autospin on
+  FOLLOW_END_EXPORT = 4;             // a movie export started
+  FOLLOW_END_DATASET_CHANGED = 5;
+  FOLLOW_END_PANEL_CLOSED = 6;       // the panel closed or was hidden
+  FOLLOW_END_REPLACED = 7;           // another Follow started, host-wide
+  FOLLOW_END_WITHDRAWN = 8;          // the plugin withdrew the offer
+  FOLLOW_END_PLUGIN_ENDED = 9;       // the plugin's EndFollow
+  FOLLOW_END_INVALID = 10;           // a state that could not apply; `detail` says why
+}
+
+message FollowEnded {
+  uint64 follow_id = 1;
+  FollowEndReason reason = 2;
+  string detail = 3;
+}
+
+message ColormapTable {
+  string name = 1;
+  // 256 entries of RGBA, u8 each, entry 0 first: 1024 bytes.  Alpha is the
+  // colormap's own (coverage), as vizi composites it.
+  bytes rgba = 2;
+}
+
+message SavePathResult {
+  string path = 1;            // absolute; empty exactly when declined
+  bool declined = 2;          // the person cancelled
+}
+
+// ============================================================================
+// The messages the doorbell and shared memory assume.
+//
+// Specified in control_plane_protocol.md §8.10-§8.13,
+// shared_memory_protocol.md and doorbell_M_memory.md.
+//
+// Two conventions run through the whole block and are load-bearing:
+//   * ENUM ZERO IS NEVER A VALUE.  Every enum here has an _UNSPECIFIED = 0 that
+//     is a protocol error where it appears, not a default.  proto3 gives every
+//     scalar a zero, so the only way an absent field cannot masquerade as a
+//     meaningful one is to make zero mean nothing.
+//   * ABSENCE IS REPRESENTABLE.  Where a field is genuinely optional -- the
+//     fault fields that depend on failure class, above all -- it is `optional`
+//     so a receiver can tell "not supplied" from "supplied as 0".  Two
+//     implementations filling plausible zeroes differently is the failure this
+//     avoids (plugin_principles.md 11).
+// ============================================================================
+
+// ---- segments: installing, retiring and releasing shared memory ----
+
+enum RegionDiscipline {
+  // A zero required field is `malformed`: the sender omitted it, so re-granting
+  // fails the same way.  An unknown NON-ZERO value is `unsupported` -- a peer
+  // older than the grant (`shared_memory_protocol.md` §3.1).
+  REGION_DISCIPLINE_UNSPECIFIED = 0;  // grant failure `malformed`
+  REGION_DISCIPLINE_CONSTANT = 1;     // written before the grant, immutable
+  REGION_DISCIPLINE_OWNED = 2;        // one value, one owner; the read IS the handoff
+  REGION_DISCIPLINE_PULSED = 3;       // N>=3 buffers, claim by CAS, consume once
+  REGION_DISCIPLINE_LOANED = 4;       // byte ring of variable-size deposits
+  REGION_DISCIPLINE_STAGED = 5;       // one volume slot edited in place by turns (processing_stages.md §6)
+}
+
+// Which end FILLS a region: the writer (CONSTANT), the publisher (PULSED), or
+// the allocator (LOANED).  For LOANED it decides which release message applies
+// -- HOST-produced is released with ReleaseDeposit, PLUGIN-produced with
+// ReleaseLoan -- and without it those two are byte-identical while having
+// opposite roles.  There is no honest default: deposit rings are host-produced
+// and overlay segments are plugin-produced.
+enum RegionProducer {
+  REGION_PRODUCER_UNSPECIFIED = 0;  // grant failure; never a default
+  REGION_PRODUCER_HOST = 1;
+  REGION_PRODUCER_PLUGIN = 2;
+}
+
+message Region {
+  uint32 index = 1;               // 0-based, dense; what a doorbell `D` mask bit names
+  uint64 offset = 2;              // mapping-relative
+  uint64 extent = 3;
+  RegionDiscipline discipline = 4;
+  RegionProducer producer = 5;
+  uint32 buffers = 6;             // PULSED: buffer count (3 today); 0 otherwise
+  uint64 slot_bytes = 7;          // PULSED: bytes per buffer; LOANED: alignment
+  string id = 8;                  // optional stable name, e.g. a manifest overlay id
+  // Where the authoritative (view_id, epoch) pair lives, as a byte offset of an
+  // 8-byte header: u32 view_id then u32 epoch, LITTLE-ENDIAN like every other
+  // multi-byte integer in a segment (shared_memory_protocol.md §1).  view_id is
+  // a u8 on the doorbell's D and E records and widens here for alignment, so its
+  // high three bytes MUST be zero.
+  //
+  // WHAT THE OFFSET IS RELATIVE TO IS shared_memory_protocol.md §2's TABLE, and
+  // this comment does not restate it: it is the unit of INDEPENDENT OWNERSHIP,
+  // which differs per discipline -- each slot for PULSED, each deposit for
+  // LOANED, the region for CONSTANT and OWNED.
+  //
+  // A second statement of it here could drift, and nothing would detect the
+  // disagreement: both ends write these headers and both read them, the header
+  // has no checksum, and either reading yields a plausible (view_id, epoch).
+  // plugin_principles.md 13: one owner, cited at the site.
+  //
+  // MUST fit: epoch_offset + 8 <= slot_bytes for PULSED, <= extent otherwise.
+  // A grant that violates that is `malformed`, not a runtime error.
+  //
+  // ABSENT means the region is not pane-associated and embeds nothing, which is
+  // why this is `optional` rather than 0-means-none -- 0 is a legal offset.
+  //
+  // A separate field rather than merged into the payload's own schema: the
+  // LOCATION is installed once and reused by every publication, while the VALUE
+  // changes per publication.  This says where the thing is; the payload says
+  // what it currently holds (shared_memory_protocol.md §2).
+  optional uint64 epoch_offset = 9;
+}
+
+// The region table: authoritative for everything about the segment interior.
+// The other half of a grant is the doorbell's `M`, which carries the capability
+// and nothing else.  EITHER MAY ARRIVE FIRST and neither waits for the other;
+// the receiver keys both on segment_id and acknowledges when the second lands.
+message InstallSegment {
+  uint64 segment_id = 1;          // never 0, never reused within a session
+  string purpose = 2;             // unknown purpose fails the grant (`unsupported`)
+  // 0 = supersedes nothing.  Otherwise the named id retires WHEN THIS GRANT IS
+  // SUCCESSFULLY INSTALLED -- on GrantInstalled, never on GrantFailed and never
+  // at receipt.  That ordering is the point: the incumbent stays usable until
+  // the replacement is, so a peer is never left holding neither
+  // (control_plane_protocol.md §5.6).  A failed grant leaves the superseded
+  // segment live and unchanged, which is what makes a re-grant safe to attempt.
+  uint64 supersedes = 3;
+  repeated Region regions = 4;
+  // WHICH manifest contribution this segment serves, by its declared `id`.
+  //
+  // `purpose` says what KIND of segment it is; this says which one.  A plugin
+  // declaring two overlays holds two `O` segments (shared_memory_protocol.md
+  // §3.1), and without this field neither installation identifies its overlay --
+  // so the lane-selection ambiguity that rule removed from INSIDE a segment
+  // reappears BETWEEN two of them, with `Region.id` still non-binding and no
+  // other key available.
+  //
+  // Host-set and load-bearing, unlike `Region.id`.  A separate field rather
+  // than making `id` binding for this one case, because that would be a change
+  // to `id`'s specification wearing the clothes of a convention -- and the same
+  // question arrives for a plugin with two panels, so the answer belongs on the
+  // segment rather than on one discipline's region.
+  //
+  // WHETHER IT IS REQUIRED IS A PROPERTY OF THE PURPOSE, not of how many
+  // contributions a plugin declared (shared_memory_protocol.md §3):
+  //
+  //   O, P   -- required, non-empty.  The segment IS the contribution's, and
+  //             two of them are otherwise indistinguishable.
+  //   G, V, X -- required to be EMPTY.  The segment serves an EXCHANGE rather
+  //             than a contribution, and the exchange already carries its own
+  //             identity: a reader handle, a ReadDataVolume reply, an export
+  //             handle.  A second name for something already named is the
+  //             failure §8 avoids by making `id` mean nothing.
+  //
+  // A receiver rejects a violation either way as `malformed` -- including a
+  // NON-empty subject where none is defined, since that is a sender asserting a
+  // binding this version does not have.
+  string subject = 5;
+}
+
+enum GrantFailureClass {
+  GRANT_FAILURE_UNSPECIFIED = 0;
+  // A CLOSED list, so that the default is permanent: mmap/MapViewOfFile out of
+  // address space, out of handles, or out of memory.  Nothing else.
+  GRANT_FAILURE_RETRYABLE = 1;
+  // ONLY an explicit size-policy refusal, never a mapping failure that happened
+  // to involve a large size.
+  GRANT_FAILURE_TOO_LARGE = 2;
+  // A vizi bug; re-granting the same thing fails again.
+  GRANT_FAILURE_MALFORMED = 3;
+  // This peer cannot use it at all: unknown purpose or discipline.
+  GRANT_FAILURE_UNSUPPORTED = 4;
+  // The catch-all: permanent, do not retry.  Its existence is what makes
+  // "every validation failure maps to exactly one class" true.
+  GRANT_FAILURE_FAILED = 5;
+}
+
+// Emitted once per segment_id, when mapped AND preamble validated AND meaning
+// applied -- or as soon as any of those is known to have failed.  Terminal and
+// replayable: a duplicate grant is answered again with the recorded answer.
+message GrantAck {
+  uint64 segment_id = 1;
+  oneof outcome {
+    GrantInstalled installed = 2;
+    GrantFailed failed = 3;
+  }
+}
+
+message GrantInstalled {
+  // The 16 identity-proof bytes at [12..28) of the preamble, READ BACK OUT OF
+  // THE MAPPING -- never echoed from the M record, which does not carry them.
+  // The host MUST compare these against what it wrote.  A mismatch means the
+  // two ends are looking at different objects; it is not retryable.
+  bytes identity_proof = 1;
+}
+
+message GrantFailed {
+  GrantFailureClass failure_class = 1;
+  string detail = 2;              // the message to surface in Plugin Manager
+}
+
+enum GrantStateKind {
+  GRANT_STATE_UNSPECIFIED = 0;
+  // Re-send the SAME grant: same segment_id, index, preamble, descriptor and
+  // doorbell id.  Never a new segment id -- the original may still be sitting
+  // undrained in the peer's socket queue.
+  GRANT_STATE_NOT_PRESENT = 1;
+  // One half arrived.  NEVER re-send M.  If InstallSegment is missing, send
+  // that; if M is missing, send nothing.  The no-progress deadline keeps running.
+  GRANT_STATE_PENDING = 2;
+  // The ack was lost, not the grant.  Take this as the ack.
+  GRANT_STATE_INSTALLED = 3;
+  // The recorded failure, replayed.  Re-grant at a NEW segment_id if the class
+  // allows.
+  GRANT_STATE_FAILED = 4;
+  // Retired and released (`shared_memory_protocol.md` §9.4).  STOP waiting, drop
+  // the host's own mapping, and NEVER re-send either half: a resend would revive
+  // a grant the peer has already released, and the peer would answer it with
+  // SegmentReleased again forever.  Reachable because §9 permits retiring a
+  // pending or unknown identity, so a query can cross a retirement in flight.
+  GRANT_STATE_RELEASED = 5;
+}
+
+// Idempotent host->plugin query, issued when a grant acknowledgement never
+// arrived.  A one-way rather than a request, so it cannot queue behind the
+// in-flight slot -- possibly behind the very command whose data the grant carries.
+message GrantStateQuery {
+  uint64 segment_id = 1;
+}
+
+// Answers GrantStateQuery, echoing the query's id.  This is the grant path's
+// only backstop: a grant can be lost with the send reporting success.
+message GrantState {
+  uint64 segment_id = 1;
+  GrantStateKind state = 2;
+  // PENDING only: which half arrived.  The host's action differs between them,
+  // so "pending" without this is not an answer.
+  optional bool have_capability = 3;   // the doorbell M
+  optional bool have_install = 4;      // InstallSegment
+  // INSTALLED only: the recorded acknowledgement, replayed verbatim.
+  optional bytes identity_proof = 5;
+  // FAILED only: the recorded failure, replayed verbatim.
+  optional GrantFailureClass failure_class = 6;
+  optional string detail = 7;
+}
+
+// "Stop using this; release when what you already started is finished."  It
+// permits finishing, never starting -- and a held Pulsed claim MUST be
+// completed and released rather than abandoned, since a claim is a mutex.
+// Retirement is a request, never an enforcement: memory cannot be withdrawn.
+message RetireSegment {
+  uint64 segment_id = 1;
+}
+
+// Asserts that this process no longer holds ANYTHING that keeps the object
+// alive: every mapping unmapped and every descriptor or section handle closed.
+// Sent after the last of those, never before.  A false release is worse than no
+// release -- the host stops listing the segment as outstanding.
+message SegmentReleased {
+  uint64 segment_id = 1;
+}
+
+// A plugin saying it has no further use for a segment it may not release on its
+// own.  A HINT: sending it changes nothing, and the plugin keeps honouring the
+// segment until RetireSegment actually arrives -- which is what keeps a
+// descriptor the host already put in flight legal.  The host owes it no
+// acknowledgement, no retirement and no deadline.
+message ReleaseRequest {
+  uint64 segment_id = 1;
+  string reason = 2;              // DIAGNOSTIC ONLY; the host never acts on it
+}
+
+// The mirror of ReleaseDeposit: the host is done with bytes the PLUGIN
+// allocated, so the plugin may reuse them.  Sent for every disposition, not
+// only for the successful one -- applied, superseded on the coalescing queue,
+// or rejected.  A superseded loan that is never returned stalls a plugin whose
+// arena is a single slot, which is what push_image's is.
+// A plugin's loan arena came up short.  NOT a request to grow one in place: an
+// arena changes size by being RETIRED AND RE-GRANTED at a new segment_id
+// (control_plane_protocol.md §5.6), and this is what tells the host a re-grant
+// is wanted and HOW MUCH is missing.
+//
+// Naming the amount is the whole point of the message.  A host watching release
+// pressure learns THAT a plugin is short and never by how much, so it would have
+// to grow by doubling -- which is what the manifest's `segment_mib` was supposed
+// to replace.  The plugin is the only end that knows the number: the sizes that
+// outrun an arena are a widget's pixel dimensions, an overlay item count that
+// scales with the data, and the depth of loans the host has not yet released.
+//
+// COALESCING (§5.4), keyed on (segment_id, region) and MERGED IN PLACE -- a full
+// arena on a drag-rate path fails many pushes, and one message per failure is a
+// flood on the channel the session needs in order to recover.  A merge keeps the
+// LARGEST `wanted_bytes` (a re-grant clearing the biggest shortfall clears the
+// rest) and SUMS `dropped` (§12 needs the count of lost transitions, and a
+// replace would discard it).
+//
+// The host owes it nothing binding, as with ReleaseRequest: memory policy is the
+// host's (§11) and a re-grant is clamped by the per-session budget (§9), so a
+// plugin naming more than the budget allows gets what the budget allows.
+message SegmentShortfall {
+  uint64 segment_id = 1;          // the arena that came up short
+  uint32 region = 2;              // which LOANED region within it
+  // The single allocation that failed, in bytes -- the plugin's answer to "how
+  // much did you need", not a proposed total.  Never 0.
+  uint64 wanted_bytes = 3;
+  // Largest contiguous free run at the time, so the host can tell exhaustion
+  // from fragmentation; the two want different re-grants.
+  uint64 largest_free_bytes = 4;
+  // Pushes dropped for want of space since this key was last reported, >= 1.
+  // §5.6 already requires a plugin count these and §12 already requires it
+  // report them: this is that count arriving somewhere, not a new obligation.
+  uint32 dropped = 5;
+}
+
+message ReleaseLoan {
+  uint64 segment_id = 1;
+  uint32 region = 2;
+  uint64 offset = 3;
+  uint64 len = 4;                 // the REQUESTED length, never the padded one
+}
+
+// ---- tools, bindings and pane epochs (the doorbell's `E` arrangement) ----
+
+enum ToolMode {
+  TOOL_MODE_UNSPECIFIED = 0;
+  TOOL_MODE_FIRE = 1;             // FIRE records only
+  TOOL_MODE_GESTURE = 2;          // PRESS / DRAG / RELEASE / CANCEL
+}
+
+// A plugin REQUESTS these in its manifest and the host assigns them here; the
+// two are the same shape on purpose.
+//
+// A trigger ENGAGES a tool.  Once engaged, the tool owns the primary pointer in
+// its views: the primary button means whatever the engaged tool means, so no
+// tool ever names it -- a tool that wants a chord asks for a MOMENTARY trigger,
+// which engages it for as long as the chord is held and hands the pointer back
+// after.  A key may hold either way; a mouse chord is down or up and nothing
+// else, so it is always momentary.
+//
+// CONFLICT: when two plugins request the same (button x mods) or the same key,
+// NEITHER is bound, and the host tells the user which plugins collided and on
+// what.  Not first-come, not last-wins, not a silent re-map -- a user has to be
+// able to know what their keys do, and a binding that silently went to one of
+// two plugins is exactly what they cannot find out.  The recourse is theirs:
+// stop both, start the one whose binding they want.
+// NONE of these carries a platform code, and that is the same rule the
+// doorbell already states: `doorbell_E_input.md` §3 fixes `mods` as a
+// platform-neutral bit set because "the host maps its own platform modifiers
+// onto these; a plugin never sees a platform-specific code -- a Qt modifier
+// flag is a 32-bit value".  The rule is the channel-independent one; it was
+// only ever written down on the fast path, and three bare `uint32`s here left
+// vizi's Qt values as the only thing anyone could put in them.
+enum TriggerHold {
+  TRIGGER_HOLD_TOGGLE = 0;        // press once: engaged; again: not (keys only)
+  TRIGGER_HOLD_MOMENTARY = 1;     // engaged while held; the prior tool returns
+}
+
+message Trigger {
+  // A portable key name, "" for a mouse trigger.  A STRING rather than a code,
+  // for the reason the manifest already gives for its own field: it is the
+  // form an author writes and the form a plugin shows a user when it says what
+  // engages its tool.  A `uint32` could only have been a Qt key code, which is
+  // meaningless to an SDK in another language -- and this message and the
+  // manifest's are "the same shape on purpose", which a code made false.
+  //
+  // Canonically spelled: modifiers, in the order SHIFT, CTRL, ALT, META, each
+  // followed by "+", then the key -- "Ctrl+J", "Ctrl+Shift+K", "F5", "Escape".
+  string key = 1;
+  MouseButton button = 2;
+  // The doorbell's set, and the SAME BITS: SHIFT 0x01, CTRL 0x02, ALT 0x04,
+  // META 0x08 (Command on macOS).  Bits 4-7 reserved, MUST be 0.  Sharing the
+  // encoding is deliberate -- an author writes one trigger and reads it back
+  // off an `E` record, and two encodings for one concept is a conversion
+  // nobody remembers is there.  `doorbell_E_input.md` §3 owns it.
+  //
+  // `mods` qualifies `button`, NOT `key`.  A trigger names a button or a key
+  // and never both, so a key carries its own modifiers in its name and leaves
+  // `mods` at 0 -- the two never describe one gesture.  ALT is never set on a
+  // mouse trigger: the manifest refuses it (window managers take Alt+drag).
+  uint32 mods = 3;
+  TriggerHold hold = 4;
+}
+
+// Something the ENGAGED tool can be told to do without ending its gesture: the
+// mouse is the target and a key is the fire (a node placed on a polygon
+// mid-drag).  The host delivers it as an `E` record with `phase = FIRE` and
+// `action` = this index, carrying the pointer's current sample; an open
+// gesture is neither closed nor disturbed.  An action's key is live only while
+// its tool is engaged, so it contests nothing among plugins -- it is refused
+// only where a key the host or another plugin's TRIGGER holds globally would
+// fire at the same press, and `key` is then "".  A pane button reaches the
+// same action with no key at all.
+message ToolAction {
+  uint32 action = 1;              // 1-based, the manifest's order; never 0
+  string action_id = 2;           // the manifest string this index stands for
+  string key = 3;                 // the key assigned, "" for none
+}
+
+// vizi binds three, which is the whole space a tool can be attached to today.
+// An enum rather than a number because nothing anywhere defined that number:
+// `control_plane_protocol.md` §8.10 settles conflict resolution OVER the
+// (button x modifier) space and `doorbell_E_input.md` §9 defers the space
+// itself to §8.10, so between them it was never named.
+enum MouseButton {
+  MOUSE_BUTTON_UNSPECIFIED = 0;   // no mouse button; a key trigger
+  MOUSE_BUTTON_LEFT = 1;
+  MOUSE_BUTTON_RIGHT = 2;
+  MOUSE_BUTTON_MIDDLE = 3;
+}
+
+// Assigns the u32 activation handle the doorbell's `E` records carry.  Handles
+// start at 1, increase, and are NEVER REUSED, from a counter that one plugin
+// alone consumes -- a host-global counter would hand one plugin 5, 9, 14 and
+// break its high-water test.  Monotonic, not consecutive.
+//
+// Messages for one session MUST be emitted in increasing `tool` order:
+// 12 before 11 moves the receiver's mark past 11, which is then rejected
+// forever as retired.  The host achieves that by permitting one unacknowledged
+// activation at a time.
+message ToolBinding {
+  uint32 tool = 1;                // never 0, never reused
+  string tool_id = 2;             // the manifest string this handle stands for
+  // The triggers ASSIGNED, a subset of those requested: one absent here was
+  // refused, and the user was told why.  Withdrawing every trigger is a
+  // `ToolBinding` for the same handle with none.
+  repeated Trigger triggers = 3;
+  ToolMode mode = 4;
+  bool cancel_on_camera_move = 5; // defaults on for anything screen-defined
+  bool retired = 6;               // withdrawal; never advances the high-water mark
+  // Which STATEMENT of this handle's arrangement, echoed by the ack.
+  //
+  // A ToolBinding for a known handle updates it IN PLACE (§8.10), so one
+  // identity carries a sequence of contents -- and a handle alone cannot say
+  // which of them an acknowledgement confirms.  A re-send's late ack then reads
+  // as confirmation of a NEWER content the peer has not installed, and the
+  // arrangement gate opens on something that is not in force.
+  //
+  // Monotonic per handle.  A re-send of the same content carries the SAME
+  // revision -- that is what makes a retry idempotent -- and a change
+  // increments it.
+  uint32 revision = 7;
+  // Every action the manifest declared, in its order, with the key each kept.
+  // The host builds the pane from the manifest; a plugin needs only the index
+  // an `E` record will name and the key it may tell a user about.
+  repeated ToolAction actions = 8;
+}
+
+// Sent AFTER the plugin's transport has accepted tool_activated / tool_retired.
+// A failed lifecycle call is never acknowledged -- silence plus the arrangement
+// deadline is the reporting path, not a negative ack.
+message ToolBindingAck {
+  uint32 tool = 1;
+  // The `revision` being acknowledged.  An ack naming an older one is stale --
+  // an in-flight retry landing after the content moved on -- and is dropped
+  // rather than mistaken for the current arrangement.
+  uint32 revision = 2;
+}
+
+// Where a channel's name came from.  `ChannelInfo.name` is never empty:
+// a channel the source did not name is shown as "Channel N" (1-based, what the
+// person sees), and this says so.
+enum ChannelNameSource {
+  CHANNEL_NAME_SOURCE_UNSPECIFIED = 0;
+  // The file, or the plugin reader that opened it, named this channel.
+  CHANNEL_NAME_SOURCE_FILE = 1;
+  // Nothing named it; `name` is the host's display label.  A plugin MUST NOT
+  // present it as the file's -- write it into no artifact as a declared name.
+  CHANNEL_NAME_SOURCE_PLACEHOLDER = 2;
+  // The person named it in vizi.  Nothing produces this yet.
+  CHANNEL_NAME_SOURCE_USER = 3;
+}
+
+message ChannelInfo {
+  uint32 index = 1;
+  string name = 2;
+  ChannelNameSource source = 3;   // additive at 1.0
+}
+
+// A box in EDGE coordinates, in level-0 voxel units.  A boundary lies at a
+// pixel EDGE, so integer pixel `i` occupies [i-0.5, i+0.5] and a crop of pixels
+// 25..1519 is {24.5, 1519.5} -- the half-open integer range [25, 1520) said
+// exactly, in floats.
+//
+// Converting to included pixel CENTRES is ceil(lo) ..= floor(hi), INCLUSIVE at
+// both ends: an exactly-integral bound is a hit.  Because a crop set on pixel
+// boundaries always lands on .5, that conversion carries ~0.5 of margin against
+// rounding and float error instead of sitting on a tie.
+//
+// Edges rather than indices because edges convert EXACTLY across pyramid levels
+// and indices do not:
+//
+//     a level-0 edge `e` is exactly  (e + 0.5)/scale - 0.5  at level N.
+//
+// AFFINE, not proportional.  The pyramid block-downsamples anchored at index 0,
+// so level-N pixel j covers level-0 [j*s, j*s+s-1] and is CENTRED at
+// j*s + (s-1)/2, not at j*s; the +-0.5 is that grid phase.  Dropping it shifts
+// every bound by 0.5*(s-1)/s level-N pixels and fails inward at the low face,
+// silently omitting a plane that is inside the crop.  A level-0 INDEX has no
+// exact level-N index at all, which is the whole reason for edges.
+//
+// It is also the representation a crop would need if an ROI is ever allowed to
+// specify one.
+message EdgeBox {
+  double z0 = 1; double z1 = 2;
+  double y0 = 3; double y1 = 4;
+  double x0 = 5; double x1 = 6;
+}
+
+// Half-open, in level-0 voxel INDICES.  Used for the dataset extent, which is
+// exactly the integer pixel range and has no precision question; the crop is an
+// EdgeBox instead.
+message Extent {
+  uint32 z0 = 1; uint32 z_n = 2;
+  uint32 y0 = 3; uint32 y_n = 4;
+  uint32 x0 = 5; uint32 x_n = 6;
+}
+
+// The SAMPLING FACTOR from level 0 to this level, per axis -- what the
+// downsampler DID, never the ratio of the two array shapes.  The two part on an
+// odd dimension: vizi block-downsamples by 2 and discards an odd trailing
+// sample, so 31 -> 15 is a scale of 2 and the shape ratio is 2.0667.
+//
+// It matters because control_plane_protocol.md §8.11's level map is
+// `(e + 0.5)/scale - 0.5` applied directly to this number, so a ratio here puts
+// every converted coordinate and every crop face slightly wrong at every level
+// >= 1 of any odd dimension.  vizi shipped exactly that bug because this
+// message said only "scale relative to level 0", which reads as either.
+//
+// And it STOPS when the axis does: an axis folded to one sample keeps the
+// factor of its last fold (`2^min(L, floor(log2 n0))` for vizi's pyramid),
+// because that is how many level-0 samples the lone sample covers.  A factor
+// that kept doubling put that sample's converted centre past the axis's end
+// (control_plane_protocol.md §8.11).  Never assume `2^L`
+// on any axis: this is the number, per level and per axis.
+message LevelScale {
+  double z = 1; double y = 2; double x = 3;
+}
+
+enum SpacingProvenance {
+  SPACING_PROVENANCE_UNSPECIFIED = 0;
+  SPACING_PROVENANCE_FILE = 1;
+  SPACING_PROVENANCE_OVERRIDE = 2;
+  // "We do not know how big a voxel is", which vizi genuinely often does not.
+  // A plugin MUST NOT read the fallback 1.0 as a measurement.
+  SPACING_PROVENANCE_DISPLAY_FALLBACK = 3;
+}
+
+// Everything, re-sent whole on any change.  There is deliberately NO dataset
+// world transform: vizi's volume is axis-aligned with per-axis spacing, and an
+// identity transform would be a claim.
+message Geometry {
+  uint64 gen = 1;
+  repeated ChannelInfo channels = 2;
+  Extent extent = 3;
+  // The global crop box: what an INTERACTION MEANS -- which content is relevant
+  // to a click.  In EDGE coordinates (see EdgeBox) so it is exact rather than
+  // rounded, and so it converts across pyramid levels by division.  Clipping is
+  // not lighting, and neither one bounds what a plugin may READ
+  // (control_plane_protocol.md §8.11).
+  // Crop-active named regions and per-voxel mask crops change what is LIT, are
+  // display state, and are carried nowhere on either channel.  So along one
+  // column a region crop may leave [2,4) and
+  // [8,10) lit and this field still reports [2,10) -- correctly, because every
+  // voxel between them is readable.  A plugin needing the lit set needs a scene
+  // feed keyed on view_id, which does not exist.
+  EdgeBox crop = 4;
+  double spacing_z = 5;
+  double spacing_y = 6;
+  double spacing_x = 7;
+  string spacing_unit = 8;        // "um", or "" when unknown
+  SpacingProvenance spacing_provenance = 9;
+  repeated LevelScale levels = 10; // per level, scale relative to level 0
+}
+
+message DatasetState {
+  uint64 gen = 1;
+  Geometry geometry = 2;          // whole, never a delta
+  // The ONE reference an arrangement may carry, and only because the mapping is
+  // itself an already-acknowledged arrangement.  0 = no mapping arranged, which
+  // is the common case.  Whole-state resend is free while the state is O(1);
+  // the time mapping is O(T) and would be re-sent on every crop drag.
+  uint32 time_mapping_revision = 3;
+}
+
+message PaneEpoch {
+  uint32 view_id = 1;             // host-assigned; 0 is a VALID pane
+  uint32 epoch = 2;               // never 0; monotonic per view_id, never restarts
+  uint64 gen = 3;                 // which DatasetState applies
+  repeated uint32 channels_high = 4; // visible channel indices >= 15
+}
+
+// Events flow for a (plugin, pane) exactly while that plugin's acknowledged
+// epoch is the pane's current one.  One message may carry several panes,
+// because one parameter change can affect several at once.
+message EpochChange {
+  repeated DatasetState datasets = 1;
+  repeated PaneEpoch panes = 2;
+}
+
+// Names the pairs the plugin has installed.  It may acknowledge some panes and
+// not others; each resumes on its own.  Sent AFTER epoch_acknowledged() has
+// succeeded on the plugin's transport.
+message EpochAck {
+  repeated PaneEpoch panes = 1;   // view_id + epoch identify; other fields ignored
+}
+
+// Arranged once per `gen`, re-sent with a new revision if it changes.  Absent an
+// arranged mapping a plugin may NOT assume uniform spacing: silence means
+// unknown, not "multiply by a constant".
+message TimeMapping {
+  uint64 gen = 1;
+  uint32 revision = 2;            // monotonic per gen; 1 for the first, never 0
+  repeated double t = 3;          // one per time index, ascending
+}
+
+message TimeMappingAck {
+  uint64 gen = 1;
+  uint32 revision = 2;
+}
+
+// ---- doorbell faults, teardown, and semantic violations ----
+
+enum DoorbellFailureClass {
+  DOORBELL_FAILURE_UNSPECIFIED = 0;
+  DOORBELL_FAILURE_BAD_CRC = 1;
+  DOORBELL_FAILURE_BAD_LENGTH = 2;        // any datagram not exactly 112 bytes
+  DOORBELL_FAILURE_BAD_VER = 3;
+  DOORBELL_FAILURE_BAD_FLAGS = 4;
+  DOORBELL_FAILURE_BAD_RESERVED = 5;
+  DOORBELL_FAILURE_BAD_PADDING = 6;
+  DOORBELL_FAILURE_CTRUNC = 7;
+  DOORBELL_FAILURE_WRONG_FD_COUNT = 8;
+  DOORBELL_FAILURE_RESERVED_OP = 9;
+  DOORBELL_FAILURE_ILLEGAL_DIRECTION = 10;
+  DOORBELL_FAILURE_SHORT_WRITE = 11;
+  DOORBELL_FAILURE_AMBIGUOUS_SEND = 12;
+  // An OS receive error that is NOT peer-gone.  Peer-gone is teardown, never a
+  // fault.
+  DOORBELL_FAILURE_RECV_ERROR = 13;
+}
+
+// The plugin's doorbell hit a framing fault and is closing.  Sent over gRPC
+// BEFORE the doorbell socket is released, while this channel is still usable --
+// that ordering is the entire point of reporting on the other channel.
+// Delivery is not waited on; gRPC is a failure detector, not an acknowledgement.
+//
+// COMPOSED, not forwarded: the transport supplies what it observed, the
+// supervisor adds the session facts.  A field the supervisor cannot establish
+// is ABSENT, not zero-filled.  Exactly one is sent per terminal event, however
+// many views of that event a transport offers.
+message DoorbellFault {
+  DoorbellFailureClass failure_class = 1;
+  // VARIABLE length: whatever bytes were held when the fault was raised -- a
+  // whole record, the truncated head of an oversized datagram, or a partial
+  // stream window.  A fixed 112 cannot carry the last two.
+  //
+  // `optional` for the reason stated at the head of this file and required of
+  // the transport's half by `doorbell_protocol.md` §12: ABSENCE IS
+  // REPRESENTABLE.  An empty capture, a zero length and a false ctrunc are all
+  // legal VALUES, so without presence a receiver cannot tell "the fault carried
+  // no capture" from "the capture was empty" -- and the eight fault fields
+  // below already carry it.  Additive and wire-compatible: the encoding of each
+  // field is unchanged.
+  optional bytes capture = 2;
+  optional uint64 observed_len = 3;  // >112 is itself the oversize signal
+  optional bool msg_ctrunc = 4;      // as reported, never inferred from lengths
+  // Frames EXAMINED on this session in this direction, so two diagnostics can
+  // be ordered.  ABSENT for short_write and ambiguous_send, which have examined
+  // none.
+  optional uint64 ordinal = 5;
+  optional uint32 os_error = 6;   // raw errno / WSA code
+  optional uint32 expected_crc = 7;
+  optional uint32 observed_crc = 8;
+  string transport_class = 9;     // seqpacket | dgram | tcp
+  string direction = 10;
+  string detail = 11;             // free text for Plugin Manager
+  // Supervisor half.  Absent when it cannot be established.
+  optional string plugin_id = 12;
+  optional string manifest_source = 13;
+  optional string sdk_version = 14;
+  optional uint32 peer_protocol_major = 15;
+  optional uint32 peer_protocol_minor = 16;
+  // A snapshot with a KNOWN BLIND SPOT: both checks stay green for a peer whose
+  // doorbell listener has died.  It says those two checks passed at that
+  // moment, not that the peer was fine.
+  optional bool process_healthy_at_detection = 17;
+  optional bool stream_healthy_at_detection = 18;
+}
+
+enum DoorbellShutdownReason {
+  DOORBELL_SHUTDOWN_UNSPECIFIED = 0;
+  DOORBELL_SHUTDOWN_RETRY_EXHAUSTED = 1;
+  DOORBELL_SHUTDOWN_PEER_NOT_DRAINING = 2;
+  DOORBELL_SHUTDOWN_FRAMING_FAULT = 3;      // the host saw the peer's traffic go wrong
+  DOORBELL_SHUTDOWN_PEER_FAULT = 4;         // answering the peer's own DoorbellFault
+  DOORBELL_SHUTDOWN_LOCAL_TRANSPORT_FAULT = 5;
+  DOORBELL_SHUTDOWN_HOST_SHUTDOWN = 6;
+  // The peer closed its doorbell with no fault the host has heard of yet; the
+  // window waits for the report that usually follows (doorbell_protocol.md §10).
+  DOORBELL_SHUTDOWN_PEER_CLOSED = 7;
+}
+
+// The host's counterpart to DoorbellFault, which is plugin->host only.  Closes
+// the doorbell and opens its grace window; the SESSION continues long enough to
+// hear the report.  Not to be confused with Shutdown, which ends everything.
+message DoorbellShutdown {
+  DoorbellShutdownReason reason = 1;
+  // Present when reason is framing_fault or peer_fault; absent otherwise.
+  optional DoorbellFailureClass failure_class = 2;
+  // A DURATION measured from the host's SEND, never an absolute time.  At the
+  // receiver it is an upper bound, not a budget: the host's timer expires
+  // whether or not this message arrived.
+  uint32 deadline_ms = 3;
+  string detail = 4;
+}
+
+// The peer's diagnostic inside the grace window.
+message DoorbellFinalReport {
+  string detail = 1;
+}
+
+// Which rule was broken.  A well-formed record whose CONTENT was wrong.
+enum ViolationSite {
+  VIOLATION_SITE_UNSPECIFIED = 0;
+  VIOLATION_SITE_EPOCH_MISMATCH = 1;       // a record under an uninstalled epoch
+  VIOLATION_SITE_INTERACTION_MISMATCH = 2; // a replay whose bytes changed
+  VIOLATION_SITE_MISSING_ARRANGEMENT = 3;  // references something unacknowledged
+  VIOLATION_SITE_ZERO_ID = 4;              // an identity field that must not be 0
+  VIOLATION_SITE_MISS_WITH_PICKED = 5;
+  VIOLATION_SITE_UNKNOWN_TOOL = 6;
+  VIOLATION_SITE_OWNED_REGION_HINT = 7;    // a D bit naming an Owned region
+  VIOLATION_SITE_IMPOSSIBLE_STATE_WORD = 8;
+  VIOLATION_SITE_INVALID_PUBLISHED_LENGTH = 9;
+  VIOLATION_SITE_RELEASE_CAS_FAILED = 10;  // proven interference
+  VIOLATION_SITE_WRONG_PRODUCER_RELEASE = 11; // a release naming the wrong side
+  // Five rules the corpus states normatively and this enum could not name, so a
+  // peer that detected one had to drop the record silently or report the wrong
+  // rule (`shared_memory_implementation_details.md` §2, "The `where` values").
+  VIOLATION_SITE_UNKNOWN_RELEASE = 12;     // a release naming no reservation
+  VIOLATION_SITE_SEQ_ON_OPEN = 13;         // seq != 0 on an opening record
+  VIOLATION_SITE_POSITION_TAIL = 14;       // a non-zero tail on a position payload
+  VIOLATION_SITE_NONFINITE_POSITION = 15;
+  VIOLATION_SITE_INVALID_TARGET = 16;
+  // Two more.  They append AFTER those above because SDKs already implement
+  // those numbers; a renumber there would break peers that are already
+  // written, and this enum is switched on by the host.
+  //
+  // An InstallSegment riding an ExportChunk that carries `inline`, which names
+  // no segment for it to install into (control_plane_protocol.md §8.12).
+  VIOLATION_SITE_INSTALL_WITHOUT_SEGMENT = 17;
+  // A release whose `offset` does not fall inside the `region` it names -- the
+  // cross-check that redundancy exists for (control_plane_protocol.md §8.12).
+  // NOT `unknown_release`: that one names no reservation at all, while this one
+  // names a real reservation through a region that cannot contain it.
+  VIOLATION_SITE_RELEASE_REGION_MISMATCH = 18;
+  // An arrangement re-sent under the same identity carrying DIFFERENT content
+  // (control_plane_protocol.md §5.5 rule 4, and §11's list of host bugs a
+  // plugin reports).  Its OWN site rather than `interaction_mismatch`, which
+  // two SDKs reached for: that one is an E-record replay whose bytes changed,
+  // and §12 aggregates per `where` under a budget a change of `where` does not
+  // reset -- so sharing a code would merge two unrelated defects into one
+  // counter and one retained exemplar, and point a developer at the fast path
+  // for a bug in the arrangement.  `epoch_mismatch` is further still: that is a
+  // RECORD under an uninstalled epoch, not an arrangement at all.
+  //
+  // `record` is absent here.  An arrangement is a control-plane message, not a
+  // 112-byte doorbell record, which is what "when there was one" admits.
+  VIOLATION_SITE_ARRANGEMENT_CONTENT_MISMATCH = 19;
+  // An arrangement whose IDENTITY went BACKWARDS -- an `EpochChange` older than
+  // the one installed, a `ToolBinding` whose revision regresses.  Its own site
+  // rather than folded into the one above, for that one's own reason: §12
+  // aggregates per `where`, so a shared code merges two defects a developer
+  // wants to tell apart.  The content-mismatch case is one identity carrying
+  // DIFFERENT content; this is the identity itself moving the wrong way, which
+  // a receiver refuses instead of installing.
+  VIOLATION_SITE_ARRANGEMENT_REGRESSED = 20;
+  // A repeated field over §9's bound.  `control_plane_protocol.md` §13 asks for
+  // it "refused rather than decoded", and a protobuf receiver cannot honour
+  // that literally -- decoding is what produces the count.  So the obligation is
+  // to refuse to APPLY it and to report under this site; both SDKs already
+  // refuse to apply and kept a local diagnostic for want of a name.
+  VIOLATION_SITE_REPEATED_FIELD_OVERFLOW = 21;
+  // A live Pulsed overlay payload whose geometry names a SEGMENT rather than
+  // carrying it inline (shared_memory_protocol.md §3.3).  A Pulsed value is
+  // consumed at a moment neither end chooses, so a descriptor inside one names
+  // a loan the sender cannot keep alive until the read happens: the update is
+  // not applied.  Distinct from `invalid_published_length`, which is about how
+  // MANY bytes a slot claims rather than what they refer to.
+  VIOLATION_SITE_LIVE_GEOMETRY_NOT_INLINE = 22;
+  // A live overlay payload whose `overlay_id` disagrees with the segment's
+  // `subject` (§3.3).  The redundancy is the check, exactly as `region` beside
+  // `offset` is on a release -- so the disagreement is reported and the update
+  // is not applied, rather than one of the two being believed.
+  VIOLATION_SITE_LANE_SUBJECT_MISMATCH = 23;
+  // Three rules asked for a §11 report and named no site to make it with, each
+  // found by two SDKs independently keeping a local diagnostic for want of a
+  // name -- which is the same evidence that earned 19-23 their numbers.
+  //
+  // `shared_memory_protocol.md` §6.3 is the test they were measured against,
+  // and it is a real test rather than a precedent for silence: revision
+  // exhaustion has no site BECAUSE the ceiling is 2^62 publish attempts, so the
+  // condition is structural, unreachable and unrecoverable and a value for it
+  // could never be sent.  All three below are operational, reachable, and
+  // fixable by a host that is told -- so they are the other answer.
+  //
+  // Two counts declared for one reservation (control_plane_protocol.md §5.6).
+  // The receiver applies the count it was FIRST given and reports; it cannot
+  // adopt the larger, because doing so accepts that the sender does not know
+  // its own set, which is the one thing `uses` exists to assert.  NOT
+  // `unknown_release` or `release_region_mismatch`: those are about WHICH
+  // bytes, this is about how many uses were declared for them.
+  VIOLATION_SITE_USES_DISAGREEMENT = 24;
+  // A `Shutdown` carrying no `deadline_ms` (§9).  The receiver adopts the
+  // table's 5 s rather than stalling, and reports -- waiting is the reading
+  // that hangs against a non-conforming peer.  Only detectable because the
+  // field is `optional`; see the comment on it.
+  VIOLATION_SITE_MISSING_DEADLINE = 25;
+  // An identity's FIRST arrangement carrying a revision other than 1 (§5.5
+  // rule 4) -- a sender allocating from a per-session counter, so handle 7's
+  // first statement is revision 12.  The receiver INSTALLS it and reports;
+  // refusing costs a session over a numbering choice, since the host re-sends
+  // the same revision and §9's budget escalates against a peer whose only
+  // fault is arithmetic.  Its own site rather than `arrangement_regressed`
+  // (an identity moving the wrong way) or `arrangement_content_mismatch` (one
+  // identity carrying two contents): this identity is starting in the wrong
+  // PLACE, and §12 aggregates per `where`.
+  VIOLATION_SITE_ARRANGEMENT_FIRST_REVISION = 26;
+  // An accepted `E` terminal whose CONTEXT cannot be reconciled with arranged
+  // state (doorbell_E_input.md §3's third terminal row): a `level` the epoch's
+  // `Geometry.levels` does not declare, a non-MISS voxel-naming coordinate
+  // outside the clip box at that level, or a `t` past an arranged time
+  // mapping's table.  The transport cannot check it (it holds no arranged
+  // state) and the supervisor may not reject a terminal over it, so the
+  // record is surfaced, the interaction closes, the part is marked unusable
+  // and THIS is reported.
+  VIOLATION_SITE_UNUSABLE_CONTEXT = 27;
+  // An overlay push the host did not apply: an item the wire vocabulary
+  // refuses (a bad shape, an unknown frame, explicit mesh vertices), a
+  // label volume that is not a VOXEL SELECTION (`OverlayLabelVolume`),
+  // or an inline field over §9's 8 MiB.
+  // `detail` names the overlay, the item and the rule; the WHOLE push is not
+  // applied, because an `OverlayUpdate` is a full replacement and applying
+  // part of one shows a state the plugin never sent.  Host -> plugin only.
+  // Before it existed a refused push was a host-side log line the plugin
+  // author could not see (control_plane_protocol.md §8.5).
+  VIOLATION_SITE_OVERLAY_ITEM_REFUSED = 28;
+  // A panel patch OP the host did not apply: a panel or widget the manifest
+  // does not declare, an image ref off the panel segment or unreadable, a PNG
+  // that did not decode, an op the widget's declared kind does not take, an
+  // inline field over §9's bound.  Per OP -- each op is its own statement
+  // about one widget (§5.4), so its neighbours in the same patch still apply.
+  // Its own site rather than 28 because §12 aggregates per `where`, and a
+  // panel defect and an overlay defect are two counters a developer wants
+  // apart.  Host -> plugin only.  It is how the plugin learns why nothing
+  // changed (control_plane_protocol.md §8.4).
+  VIOLATION_SITE_PANEL_PATCH_REFUSED = 29;
+  // A chunked-overlay message the host did not apply (§5.7, §8.5): an
+  // `OverlayChunk` or `OverlayLabelTable` naming an overlay the manifest does
+  // not declare CHUNKED, a chunk at a level the open dataset does not have,
+  // a box outside that level's shape, labels that are not u8/u16, a ref into
+  // a segment that is not the overlay's, a malformed LUT, an inline field
+  // over §9's bound -- or an `OverlayUpdate` sent to a chunked overlay, whose
+  // unit of state is the chunk.  NOT a chunk the host did not ask for: that
+  // is dropped and counted in the Plugin Manager's report, because a want
+  // that left the set while the chunk was in flight is ordinary, not a
+  // defect.  Its own site rather than 28 for the reason 29 has one: §12
+  // aggregates per `where`, and a chunk defect and an item defect are two
+  // counters.  Host -> plugin only.
+  VIOLATION_SITE_OVERLAY_CHUNK_REFUSED = 30;
+  // A processing stage found a STAGED slot's header invalid
+  // (processing_stages.md §7): handed back `failed`, reason 1, and reported here.
+  VIOLATION_SITE_STAGE_SLOT_INVALID = 31;
+  // A StageArm the plugin cannot use: its segment_id names no installed "S"
+  // segment, its stage_id no declared stage, or its pipeline or position is
+  // out of range (processing_stages.md §4).  Not acknowledged; the
+  // arrangement's deadline is how the host sees it.
+  VIOLATION_SITE_STAGE_ARM_REFUSED = 32;
+  // A `shape_proposal` or `shape_answer` out of step with the edits the host
+  // began (control_plane_protocol.md §8.8): naming a `drag_id` never
+  // sent to this session, a `seq` never sent within that drag, or answering
+  // one `shape_commit` twice.  NOT a reply for a drag that has already ended,
+  // which is dropped silently: the plugin cannot know the drag ended until
+  // `shape_edit_ended` reaches it.  Host -> plugin only.
+  VIOLATION_SITE_SHAPE_OUT_OF_STEP = 33;
+  // A shape the host did not apply: a position count that is not the
+  // region's vertex count, or a non-finite component.  A proposal leaves the
+  // last shape on screen; an answer reverts the edit and `shape_edit_ended`
+  // says so too.  Its own site rather than 33: that one is about WHEN a reply
+  // came, this one about WHAT it said.  Host -> plugin only.
+  VIOLATION_SITE_SHAPE_REFUSED = 34;
+}
+
+// Report, isolate, keep the session.  NOT DoorbellFault: framing faults tear
+// down, semantic disagreements report and drop.
+//
+// RATE-BOUNDED, and that is a requirement rather than an optimisation -- its
+// highest-rate producers are decided per record, so at mouse rate an ordering
+// bug is ~1 kHz of messages on the channel the session needs to recover.
+// First occurrence of a `where` carries the record and count = 1; after that
+// occurrences are counted per `where` and re-reported on a bounded interval,
+// under a per-session budget that a change of `where` does not reset.
+//
+// The host MUST NOT read a repeat as a new defect: `count` is the number of
+// RECORDS affected, not the number of faults.
+message ContractViolation {
+  ViolationSite where = 1;
+  string detail = 2;
+  bytes record = 3;               // the offending 112-byte record, when there was one
+  uint32 count = 4;               // occurrences since the last report, >= 1
+}
+
+// ============================================================================
+// Processing stages -- processing_stages.md is normative.
+//
+// The reference host drives a chain of one stage (an applied filter); the
+// rules for longer chains are specified ahead of it.  A stage edits a volume in
+// place in a ring of STAGED slots (segment purpose "S"), one mapping granted to
+// every stage in the chain; the slot's header, not a message, carries the
+// result (processing_stages.md §5).
+// ============================================================================
+
+// What a stage is handed, or the largest it will produce.
+message StageShape {
+  // Channel indices present, in PLANE order -- plane i holds channel
+  // channels[i], and in general plane i is not channel i (§5.2).  Ignored on
+  // StagePlanned.output: the host derives it from `modifies` and `adds`.
+  repeated uint32 channels = 1;
+  uint32 z = 2;
+  uint32 y = 3;
+  uint32 x = 4;
+  DType dtype = 5;                 // ONE type for every channel (§5.3)
+}
+
+// Host -> plugin request: what will you do with this input?  (§3)
+message PlanStage {
+  string stage_id = 1;             // the manifest `stages` id
+  StageShape input = 2;
+  // Every parameter the manifest declares for this stage, and no other: its
+  // `type` fixes the Value kind (float f, int i, bool b, choice s) and the
+  // value lies in its range or options (processing_stages.md §2).  A plan
+  // answers for THESE values.  Anything else is Error{INVALID_ARGUMENT}.
+  map<string, Value> params = 3;
+}
+
+// An existing channel the stage rewrites in place, and what it needs to.
+message StageChannelNeed {
+  uint32 channel = 1;
+  repeated uint32 needs = 2;       // input channel indices
+}
+
+// A channel the stage appends.  The host assigns its index (StageArm).
+message StageNewChannel {
+  string key = 1;                  // plugin-local; non-empty, unique in this plan
+  string name = 2;                 // what a person sees
+  repeated uint32 needs = 3;       // input channel indices
+}
+
+// Plugin -> host reply to PlanStage: the LARGEST output (§3).  z, y, x are the
+// allocation the stage lays its output out in, each <= the input's; dtype is
+// every channel's type afterwards.  Each stage chooses its own layout; the ring
+// is sized for the most BYTES any step needs (§3.2).
+message StagePlanned {
+  StageShape output = 1;
+  repeated StageChannelNeed modifies = 2;
+  repeated StageNewChannel adds = 3;
+  // Input channels the stage reads and does not write (processing_stages.md
+  // §3): a stabilizer that computes its pose from channel 0 names 0 here.
+  // Loaded like any other need, and never treated as rewritten.
+  repeated uint32 reads = 4;
+}
+
+// Host -> plugin arrangement (control_plane_protocol.md §5.5): where this stage
+// sits.  No slot is handed to it before StageArmAck for this revision.
+message StageArm {
+  string stage_id = 1;
+  uint32 revision = 2;             // never 0; a re-arm is a new revision
+  uint64 segment_id = 3;           // this session's id for the chain's "S" ring
+  // 1..32766, assigned by the host; bits 48-63 of the turn word, SIGNED: a
+  // stage stores position + 1 when it processed and -position when it
+  // refused or failed (§6.1).  An arm is identified by (pipeline, position).
+  uint32 position = 4;
+  StageShape input = 5;            // what this stage will be handed
+  // Each StagePlanned.adds[].key -> the channel index the host assigned, above
+  // the source's channel count; u16 in the slot, so <= 65535 (§4).
+  map<string, uint32> new_channels = 6;
+  // The chain, 1..65535, unique among the chains the host runs at once; with
+  // `position` (<= 65535) it is what the slot's u64 turn word holds when the
+  // slot is this stage's (processing_stages.md §6.1).
+  uint32 pipeline = 7;
+  // The plan the host accepted for this position: the LARGEST output (§3).
+  // The arm, not the last StagePlanned, is what the stage is held to (§4).
+  StageShape output = 8;
+  // The parameters this position runs with: the values the accepted plan was
+  // made with.  Parameters belong to the POSITION, so one stage may sit at
+  // two positions with different settings; changing one is a new plan and a
+  // new revision (processing_stages.md §2, §4).
+  map<string, Value> params = 9;
+}
+
+// Plugin -> host: StageArm `revision` is installed at (pipeline, position).
+// An older revision of the same (pipeline, position) is stale.
+message StageArmAck {
+  string stage_id = 1;
+  uint32 revision = 2;
+  uint32 pipeline = 3;
+  uint32 position = 4;
+}

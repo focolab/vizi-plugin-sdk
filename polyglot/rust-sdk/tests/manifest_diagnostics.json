@@ -1,0 +1,249 @@
+{
+  "manifest_version 2 unsupported": [
+    "manifest_version unsupported"
+  ],
+  "field 'manifest_version' must be int": [
+    "manifest_version unsupported"
+  ],
+  "id must be non-empty": [
+    "id must be non-blank"
+  ],
+  "engines.vizi 'one.zero' is not a version": [
+    "engines.vizi is not a version"
+  ],
+  "engines.vizi '1.0.3' is not a version": [
+    "engines.vizi is not a version"
+  ],
+  "engines.vizi '1.*' is not a version": [
+    "engines.vizi is not a version"
+  ],
+  "engines.vizi '1.-1' has a negative component": [
+    "engines.vizi is not a version"
+  ],
+  "entry.command must be a non-empty list of strings": [
+    "entry.command must be non-empty",
+    "entry.command must be a string"
+  ],
+  "duplicate reader id 'r'": [
+    "duplicate readers id 'r'"
+  ],
+  "duplicate command id 'run'": [
+    "duplicate commands id 'run'"
+  ],
+  "default_keybinding must be a non-empty string": [
+    "default_keybinding must be non-blank"
+  ],
+  "menu 'file' not allowed": [
+    "menu must be 'tools' or null"
+  ],
+  "duplicate panel id 'p'": [
+    "duplicate panels id 'p'"
+  ],
+  "menu_label must be at most 128 characters": [
+    "invalid menu_label"
+  ],
+  "menu_label must be a non-empty string": [
+    "invalid menu_label"
+  ],
+  "widget id must be non-empty": [
+    "id must be non-blank"
+  ],
+  "duplicate widget id 'a'": [
+    "duplicate widget id"
+  ],
+  "button widget 'go' must bind a declared command": [
+    "button widget must bind a declared command"
+  ],
+  "row 'r' has no children": [
+    "children must be non-empty"
+  ],
+  "slider 's' needs min < max": [
+    "slider needs min < max and step > 0"
+  ],
+  "slider 's' needs step > 0": [
+    "slider needs min < max and step > 0"
+  ],
+  "slider 's' min must be numeric": [
+    "min must be numeric"
+  ],
+  "slider 's' float must be a boolean": [
+    "float must be a boolean"
+  ],
+  "label 'l' text must be a string": [
+    "text must be a string"
+  ],
+  "progress 'bar' value must be numeric": [
+    "progress value must be numeric"
+  ],
+  "progress 'bar' value must be within [0, 1]": [
+    "progress value must be within [0, 1]"
+  ],
+  "progress 'bar' indeterminate must be a boolean": [
+    "progress indeterminate must be boolean"
+  ],
+  "slider 's' value must be numeric": [
+    "slider value must be numeric"
+  ],
+  "dropdown 'd' needs non-empty options": [
+    "missing required field 'options'"
+  ],
+  "dropdown 'd' default 'slow' not in options": [
+    "dropdown value not in options"
+  ],
+  "list 'cells' row[0] is a row; a row holds leaf widgets only": [
+    "list row holds leaf widgets only"
+  ],
+  "list 'cells' has an empty row": [
+    "list row must be a non-empty array"
+  ],
+  "list 'cells' max_rows must be an integer in [1, 1024]": [
+    "list max_rows must be an integer in [1, 1024]"
+  ],
+  "list 'cells' binds a command only when selectable": [
+    "list binds a command only when selectable"
+  ],
+  "list 'cells' selectable must be a boolean": [
+    "selectable must be boolean and is only allowed on a list"
+  ],
+  "panel 'p' has moves_view widgets and declares no view_targets": [
+    "panel has moves_view widgets and declares no view_targets"
+  ],
+  "image widget 'trace' must bind a declared command": [
+    "image widget must bind a declared command"
+  ],
+  "roi_picker 'roi' filter must be one of": [
+    "roi_picker filter must be all or mine"
+  ],
+  "duplicate stage id 'stabilize'": [
+    "duplicate stages id 'stabilize'"
+  ],
+  "key must be non-empty": [
+    "stage param key must be non-blank"
+  ],
+  "duplicate param key 'a'": [
+    "duplicate stage param key \"a\""
+  ],
+  "type must be one of ['float', 'int', 'bool', 'choice', 'string']": [
+    "unknown stage param type"
+  ],
+  "needs a value, the default": [
+    "stage param needs a default value"
+  ],
+  "a bool param does not take ['min']": [
+    "stage param \"a\": field not allowed for bool"
+  ],
+  "value must be a boolean": [
+    "stage bool default must be boolean"
+  ],
+  "options must be a non-empty list of distinct strings": [
+    "stage choice needs distinct options and a default among them"
+  ],
+  "value must be one of the options": [
+    "stage choice needs distinct options and a default among them"
+  ],
+  "a string param does not take ['options']": [
+    "stage param \"a\": field not allowed for string"
+  ],
+  "value must be a string": [
+    "stage string default must be a string"
+  ],
+  "value is longer than max_length (1 UTF-8 bytes)": [
+    "stage string default exceeds max_length in UTF-8 bytes"
+  ],
+  "numeric field 'value' must be an integer": [
+    "invalid numeric default"
+  ],
+  "numeric field 'value' must fit a signed 64-bit integer": [
+    "invalid numeric default"
+  ],
+  "numeric field 'min' must fit a signed 64-bit integer": [
+    "invalid numeric bound"
+  ],
+  "needs min <= max": [
+    "default outside range or min exceeds max"
+  ],
+  "value is outside [min, max]": [
+    "default outside range or min exceeds max"
+  ],
+  "duplicate exporter id 'csv'": [
+    "duplicate exporters id 'csv'"
+  ],
+  "duplicate overlay id 'o'": [
+    "duplicate overlays id 'o'"
+  ],
+  "duplicate tool id 't'": [
+    "duplicate tools id 't'"
+  ],
+  "views must be a non-empty list from ['2d', '3d']": [
+    "views must be from ['2d', '3d']"
+  ],
+  "triggers needs manifest_version 1 (this manifest declares 0)": [
+    "triggers needs manifest_version 1"
+  ],
+  "mode needs manifest_version 1 (this manifest declares 0)": [
+    "mode needs manifest_version 1"
+  ],
+  "pane needs manifest_version 1 (this manifest declares 0)": [
+    "pane needs manifest_version 1"
+  ],
+  "mode 'toggle' not in": [
+    "mode must be gesture or fire"
+  ],
+  "button 'wheel' not in": [
+    "invalid trigger button"
+  ],
+  "modifiers 'hyper' not in": [
+    "mouse modifiers must be shift, ctrl or meta; alt is not a mouse modifier"
+  ],
+  "hold 'sticky' not in": [
+    "hold must be toggle or momentary"
+  ],
+  "pane.icon must be non-empty": [
+    "icon must be non-blank"
+  ],
+  "duplicate action id 'a'": [
+    "duplicate action id"
+  ],
+  "key 'N' is also one of this tool's triggers": [
+    "action key is also one of this tool's triggers"
+  ],
+  "key 'N' is also another action's of this tool": [
+    "action key is also another action's of this tool"
+  ],
+  "pane.icon 'missing.svg' not found in the plugin directory": [
+    "pane.icon not found in the plugin directory"
+  ],
+  "pane.icon 'icons/tool.gif' is not one of": [
+    "pane.icon must be .svg or .png"
+  ],
+  "pane.icon '../tool.svg' must be a path inside the plugin directory": [
+    "pane.icon must be a path inside the plugin directory"
+  ],
+  "pane.icon 'icons/big.png' is 65537 bytes; the limit is 65536": [
+    "pane.icon exceeds 65536 bytes"
+  ],
+  "pane.icon 'icons/fake.png' is not a PNG file": [
+    "pane.icon is not a png file"
+  ],
+  "pane.icon 'icons/fake.svg' is not an SVG file": [
+    "pane.icon is not a svg file"
+  ],
+  "pane.hold 'toggle': an action or command button fires once on click": [
+    "an action or command button fires once on click"
+  ],
+  "id must start with an alphanumeric": [
+    "invalid asset id"
+  ],
+  "duplicate asset id 'w'": [
+    "duplicate asset id"
+  ],
+  "source.kind must be 'manual' or 'https'": [
+    "source.kind must be manual or https"
+  ],
+  "HTTPS source needs a string url": [
+    "missing required field 'url'"
+  ],
+  "source.url must be an HTTPS URL without credentials": [
+    "source.url must be HTTPS without credentials"
+  ]
+}

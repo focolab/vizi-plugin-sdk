@@ -1,0 +1,131 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.peak_roi",
+  "name": "Peak ROI",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      "./peak-roi"
+    ]
+  },
+  "contributions": {
+    "commands": [
+      {
+        "id": "peak.set_z",
+        "title": "Set Z extent",
+        "menu": null
+      },
+      {
+        "id": "peak.set_y",
+        "title": "Set Y extent",
+        "menu": null
+      },
+      {
+        "id": "peak.set_x",
+        "title": "Set X extent",
+        "menu": null
+      },
+      {
+        "id": "peak.set_mode",
+        "title": "Set timepoint mode",
+        "menu": null
+      },
+      {
+        "id": "peak.run",
+        "title": "Find peak",
+        "menu": null
+      }
+    ],
+    "panels": [
+      {
+        "id": "peak",
+        "title": "Peak ROI",
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "row",
+              "id": "rz",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lz",
+                  "text": "Z extent (voxels)"
+                },
+                {
+                  "kind": "line_edit",
+                  "id": "ez",
+                  "command": "peak.set_z",
+                  "value": "4"
+                }
+              ]
+            },
+            {
+              "kind": "row",
+              "id": "ry",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "ly",
+                  "text": "Y extent (voxels)"
+                },
+                {
+                  "kind": "line_edit",
+                  "id": "ey",
+                  "command": "peak.set_y",
+                  "value": "8"
+                }
+              ]
+            },
+            {
+              "kind": "row",
+              "id": "rx",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lx",
+                  "text": "X extent (voxels)"
+                },
+                {
+                  "kind": "line_edit",
+                  "id": "ex",
+                  "command": "peak.set_x",
+                  "value": "8"
+                }
+              ]
+            },
+            {
+              "kind": "dropdown",
+              "id": "mode",
+              "command": "peak.set_mode",
+              "options": [
+                "Current timepoint",
+                "All timepoints"
+              ],
+              "value": "Current timepoint"
+            },
+            {
+              "kind": "button",
+              "id": "go",
+              "command": "peak.run",
+              "text": "Find peak"
+            },
+            {
+              "kind": "label",
+              "id": "status",
+              "text": "Ready"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "permissions": [
+    "data_access",
+    "contribute_rois"
+  ]
+}

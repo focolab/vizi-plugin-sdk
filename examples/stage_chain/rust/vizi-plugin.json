@@ -1,0 +1,102 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.stage_chain",
+  "name": "Stage Chain",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      "sh",
+      "launch.sh"
+    ]
+  },
+  "contributions": {
+    "stages": [
+      {
+        "id": "gain",
+        "name": "Gain",
+        "params": [
+          {
+            "key": "factor",
+            "name": "Factor",
+            "type": "float",
+            "value": 1.0,
+            "min": 0.0,
+            "max": 16.0
+          },
+          {
+            "key": "channel",
+            "name": "Channel",
+            "type": "int",
+            "value": 0,
+            "min": 0,
+            "max": 65535
+          },
+          {
+            "key": "stall_ms",
+            "name": "Stall (ms)",
+            "type": "int",
+            "value": 0,
+            "min": 0,
+            "max": 60000
+          }
+        ]
+      },
+      {
+        "id": "diff",
+        "name": "Absolute difference",
+        "params": [
+          {
+            "key": "a",
+            "type": "int",
+            "value": 0,
+            "min": 0,
+            "max": 65535,
+            "name": "a"
+          },
+          {
+            "key": "b",
+            "type": "int",
+            "value": 1,
+            "min": 0,
+            "max": 65535,
+            "name": "b"
+          }
+        ]
+      },
+      {
+        "id": "widen",
+        "name": "Widen to f32",
+        "params": [
+          {
+            "key": "crop",
+            "name": "Crop (voxels, y and x)",
+            "type": "int",
+            "value": 0,
+            "min": 0,
+            "max": 1024
+          }
+        ]
+      },
+      {
+        "id": "drift",
+        "name": "Drift (pose only)",
+        "params": [
+          {
+            "key": "channel",
+            "type": "int",
+            "value": 0,
+            "min": 0,
+            "max": 65535,
+            "name": "channel"
+          }
+        ]
+      }
+    ]
+  },
+  "assets": [],
+  "permissions": [],
+  "subscriptions": []
+}

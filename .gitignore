@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# built by scripts/head_to_head.py
+polyglot/go-sdk/doorbell-peer
+
+# Editor and OS strays.  A build's output is ignored beside the code that
+# produces it, in that directory's own .gitignore.
+DEADJOE
+*~
+*.swp
+.DS_Store
+

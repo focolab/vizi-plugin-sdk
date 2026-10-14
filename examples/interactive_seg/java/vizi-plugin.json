@@ -1,0 +1,205 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.interactive_seg",
+  "name": "Interactive Segmentation",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      "./interactive-seg"
+    ]
+  },
+  "contributions": {
+    "commands": [
+      {
+        "id": "seg.set_min_size",
+        "title": "Set minimum size",
+        "menu": null
+      },
+      {
+        "id": "seg.set_threshold",
+        "title": "Set threshold scale",
+        "menu": null
+      },
+      {
+        "id": "seg.set_3d",
+        "title": "Set 3D growth",
+        "menu": null
+      },
+      {
+        "id": "seg.set_mode",
+        "title": "Set accumulate mode",
+        "menu": null
+      },
+      {
+        "id": "seg.set_region",
+        "title": "Set measured region",
+        "menu": null
+      },
+      {
+        "id": "seg.pick",
+        "title": "Activate lasso",
+        "menu": null
+      },
+      {
+        "id": "seg.commit",
+        "title": "Commit to annotations",
+        "menu": null
+      },
+      {
+        "id": "seg.measure",
+        "title": "Measure over time",
+        "menu": null
+      },
+      {
+        "id": "seg.reset",
+        "title": "Clear segmentation",
+        "menu": null
+      }
+    ],
+    "panels": [
+      {
+        "id": "seg",
+        "title": "Interactive Segmentation",
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "button",
+              "id": "pick",
+              "command": "seg.pick",
+              "text": "Select region…"
+            },
+            {
+              "kind": "row",
+              "id": "rsize",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lsize",
+                  "text": "Minimum size (voxels)"
+                },
+                {
+                  "kind": "slider",
+                  "id": "size",
+                  "command": "seg.set_min_size",
+                  "min": 1.0,
+                  "max": 5000.0,
+                  "step": 10.0,
+                  "value": 50.0
+                }
+              ]
+            },
+            {
+              "kind": "row",
+              "id": "rthresh",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lthresh",
+                  "text": "Threshold ×"
+                },
+                {
+                  "kind": "slider",
+                  "id": "thresh",
+                  "command": "seg.set_threshold",
+                  "min": 0.5,
+                  "max": 2.0,
+                  "step": 0.05,
+                  "value": 1.0,
+                  "float": true
+                }
+              ]
+            },
+            {
+              "kind": "checkbox",
+              "id": "grow3d",
+              "command": "seg.set_3d",
+              "text": "Grow through Z",
+              "value": true
+            },
+            {
+              "kind": "dropdown",
+              "id": "mode",
+              "command": "seg.set_mode",
+              "options": [
+                "Replace",
+                "Add"
+              ],
+              "value": "Replace"
+            },
+            {
+              "kind": "button",
+              "id": "commit",
+              "command": "seg.commit",
+              "text": "Commit to annotations"
+            },
+            {
+              "kind": "row",
+              "id": "rmeasure",
+              "children": [
+                {
+                  "kind": "dropdown",
+                  "id": "region",
+                  "command": "seg.set_region",
+                  "options": [
+                    "(none)"
+                  ],
+                  "value": "(none)"
+                },
+                {
+                  "kind": "button",
+                  "id": "measure",
+                  "command": "seg.measure",
+                  "text": "Measure"
+                }
+              ]
+            },
+            {
+              "kind": "image",
+              "id": "plot"
+            },
+            {
+              "kind": "button",
+              "id": "reset",
+              "command": "seg.reset",
+              "text": "Clear"
+            },
+            {
+              "kind": "label",
+              "id": "status",
+              "text": "Ready"
+            }
+          ]
+        }
+      }
+    ],
+    "overlays": [
+      {
+        "id": "seg.trail",
+        "name": "Lasso trail"
+      },
+      {
+        "id": "seg.labels",
+        "name": "Segmentation",
+        "segment_mib": 64
+      }
+    ],
+    "tools": [
+      {
+        "id": "seg.lasso",
+        "name": "Lasso segment",
+        "views": [
+          "2d"
+        ]
+      }
+    ]
+  },
+  "permissions": [
+    "data_access",
+    "contribute_rois"
+  ]
+}

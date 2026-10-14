@@ -1,0 +1,195 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.ray_probe",
+  "name": "Ray probe",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      "./ray-probe"
+    ]
+  },
+  "permissions": [
+    "data_access",
+    "contribute_rois"
+  ],
+  "contributions": {
+    "tools": [
+      {
+        "id": "probe.point",
+        "menu": "tools",
+        "name": "Probe",
+        "views": [
+          "2d",
+          "3d"
+        ],
+        "mode": "gesture",
+        "cancel_on_camera_move": false,
+        "triggers": [
+          {
+            "key": "Shift+P",
+            "hold": "toggle"
+          },
+          {
+            "button": "middle"
+          }
+        ],
+        "actions": [
+          {
+            "id": "undo",
+            "name": "Undo pick",
+            "key": "U",
+            "pane": {
+              "icon": "icons/undo.svg",
+              "tooltip": "Undo the last pick"
+            }
+          },
+          {
+            "id": "clear",
+            "name": "Clear picks",
+            "key": "X",
+            "pane": {
+              "icon": "icons/clear.svg",
+              "tooltip": "Clear every pick"
+            }
+          }
+        ],
+        "pane": {
+          "icon": "icons/probe.svg",
+          "tooltip": "Probe: the brightest voxel under the pointer",
+          "hold": "toggle"
+        }
+      }
+    ],
+    "overlays": [
+      {
+        "id": "probe.picks",
+        "name": "Picks",
+        "segment_mib": 4
+      },
+      {
+        "id": "probe.aim",
+        "name": "Aim",
+        "segment_mib": 4
+      }
+    ],
+    "commands": [
+      {
+        "id": "probe.set_radius",
+        "title": "Set ROI radius",
+        "menu": null
+      },
+      {
+        "id": "probe.set_refine",
+        "title": "Refine at level 0",
+        "menu": null
+      },
+      {
+        "id": "probe.undo",
+        "title": "Undo pick",
+        "menu": null
+      },
+      {
+        "id": "probe.clear",
+        "title": "Clear picks",
+        "menu": null
+      },
+      {
+        "id": "probe.contribute",
+        "title": "Contribute picks as ROIs",
+        "menu": "tools"
+      }
+    ],
+    "panels": [
+      {
+        "id": "probe",
+        "title": "Ray probe",
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "label",
+              "id": "status",
+              "text": "Ready"
+            },
+            {
+              "kind": "row",
+              "id": "rradius",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lradius",
+                  "text": "ROI radius (voxels)"
+                },
+                {
+                  "kind": "line_edit",
+                  "id": "radius",
+                  "command": "probe.set_radius",
+                  "value": "3"
+                }
+              ]
+            },
+            {
+              "kind": "checkbox",
+              "id": "refine",
+              "command": "probe.set_refine",
+              "text": "Refine at level 0",
+              "value": true
+            },
+            {
+              "kind": "row",
+              "id": "rbuttons",
+              "children": [
+                {
+                  "kind": "button",
+                  "id": "undo",
+                  "command": "probe.undo",
+                  "text": "Undo"
+                },
+                {
+                  "kind": "button",
+                  "id": "clear",
+                  "command": "probe.clear",
+                  "text": "Clear"
+                },
+                {
+                  "kind": "button",
+                  "id": "contribute",
+                  "command": "probe.contribute",
+                  "text": "Contribute"
+                }
+              ]
+            },
+            {
+              "kind": "label",
+              "id": "count",
+              "text": "No picks"
+            }
+          ]
+        }
+      },
+      {
+        "id": "profile",
+        "title": "Ray profile",
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "image",
+              "id": "plot"
+            },
+            {
+              "kind": "label",
+              "id": "pick",
+              "text": "No pick yet"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

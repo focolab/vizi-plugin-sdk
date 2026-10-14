@@ -1,0 +1,15 @@
+[package]
+name = "ray-probe"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[dependencies]
+vizi = { package = "vizi-doorbell", path = "../../../polyglot/rust-sdk" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+prost = "0.13"
+crc32fast = "1.5"
+
+[profile.dev]
+opt-level = 1

@@ -1,0 +1,44 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.region_quant",
+  "name": "Region Quant",
+  "version": "0.1.0",
+  "engines": { "vizi": "1.0" },
+  "entry": { "command": [".venv/bin/python", "region_quant.py"] },
+  "permissions": ["data_access"],
+  "subscriptions": ["view", "regions"],
+  "contributions": {
+    "commands": [
+      { "id": "quant.channel",   "title": "Measure a channel",         "menu": null },
+      { "id": "quant.pick",      "title": "Select a region",           "menu": null },
+      { "id": "quant.brightest", "title": "Go to the brightest frame", "menu": null },
+      { "id": "quant.export",    "title": "Export region means",       "menu": null }
+    ],
+    "panels": [
+      {
+        "id": "quant",
+        "title": "Region Quant",
+        "view_targets": ["t", "select_region"],
+        "follow_targets": ["frame_region"],
+        "root": {
+          "kind": "column", "id": "root",
+          "children": [
+            { "kind": "channel_picker", "id": "channel", "command": "quant.channel", "value": 0 },
+            { "kind": "list", "id": "regions", "command": "quant.pick", "selectable": true, "moves_view": true,
+              "max_rows": 1024, "visible_rows": 8,
+              "row": [
+                { "kind": "label", "id": "name",   "text": "" },
+                { "kind": "label", "id": "voxels", "text": "" },
+                { "kind": "label", "id": "mean",   "text": "" },
+                { "kind": "image", "id": "swatch" }
+              ] },
+            { "kind": "button", "id": "brightest", "text": "Brightest frame", "command": "quant.brightest", "moves_view": true },
+            { "kind": "button", "id": "export", "text": "Export CSV…", "command": "quant.export" },
+            { "kind": "label", "id": "tracing", "text": "" },
+            { "kind": "label", "id": "status", "text": "Ready" }
+          ]
+        }
+      }
+    ]
+  }
+}

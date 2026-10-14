@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Divergences the specification does not settle. Each entry names a scenario",
+    "and how the cross-check should compare it; every replayer reads this list",
+    "out of the corpus so all of them treat an open question the same way.",
+    "",
+    "An entry is a question the specification leaves open, not a bug in any one",
+    "SDK. An entry is removed when the specification answers it, and the",
+    "comparison for that scenario goes back to strict.",
+    "",
+    "The list is empty: the comparison is strict everywhere.",
+    "",
+    "compare:",
+    "  absent          the sequence of verdicts must match exactly",
+    "  interleaving    each kind's subsequence must match in order, but the",
+    "                  interleaving between kinds is not compared",
+    "  report          divergences are printed and do not fail the run"
+  ],
+  "unsettled": []
+}

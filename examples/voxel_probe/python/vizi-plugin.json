@@ -1,0 +1,36 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.voxel_probe",
+  "name": "Voxel Probe",
+  "version": "0.1.0",
+  "engines": { "vizi": "1.0" },
+  "entry": { "command": [".venv/bin/python", "voxel_probe.py"] },
+  "contributions": {
+    "tools": [
+      { "id": "probe", "name": "Voxel probe", "views": ["2d", "3d"] }
+    ],
+    "overlays": [
+      { "id": "probe_marker", "name": "Probe marker" },
+      { "id": "probe_trail",  "name": "Probe trail", "segment_mib": 4 }
+    ],
+    "commands": [
+      { "id": "probe.snapshot", "title": "Snapshot the trail", "menu": null },
+      { "id": "probe.clear",    "title": "Clear the probe",    "menu": null }
+    ],
+    "panels": [
+      {
+        "id": "probe",
+        "title": "Voxel Probe",
+        "root": {
+          "kind": "column", "id": "root",
+          "children": [
+            { "kind": "label",  "id": "status", "text": "No gesture yet" },
+            { "kind": "image",  "id": "snapshot" },
+            { "kind": "button", "id": "snap",  "text": "Snapshot", "command": "probe.snapshot" },
+            { "kind": "button", "id": "clear", "text": "Clear",    "command": "probe.clear" }
+          ]
+        }
+      }
+    ]
+  }
+}
