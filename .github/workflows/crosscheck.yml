@@ -1,0 +1,80 @@
+name: Doorbell corpus cross-check
+# The cross-SDK replay in `polyglot/CROSSCHECK.md`: the Python encoder writes
+# the corpus, the Go, Rust and Java receivers each replay it, and the
+# comparator fails on any divergence the documents settle.  Every replayer
+# needs an explicit corpus run, which this job supplies.  Linux only: the corpus is plugin-side
+# doorbell framing, which is the same bytes on every OS.
+on:
+  push:
+    paths:
+      - 'polyglot/**'
+      - 'vizi_plugin_sdk/doorbell.py'
+      - 'scripts/gen_v2_crosscheck.py'
+      - 'scripts/compare_v2_verdicts.py'
+      - 'proto/**'
+      - 'docs/spec/**'
+      - '.github/workflows/crosscheck.yml'
+  pull_request:
+    paths:
+      - 'polyglot/**'
+      - 'vizi_plugin_sdk/doorbell.py'
+      - 'scripts/gen_v2_crosscheck.py'
+      - 'scripts/compare_v2_verdicts.py'
+      - 'proto/**'
+      - 'docs/spec/**'
+      - '.github/workflows/crosscheck.yml'
+  workflow_dispatch:
+
+# A newer push or PR update on the same ref cancels the run it supersedes; the
+# nightly run has a group of its own so a push never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  corpus:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    env:
+      VIZI_V2_CORPUS: ${{ github.workspace }}/xc/corpus.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: polyglot/go-sdk/go.mod
+          cache-dependency-path: polyglot/go-sdk/go.sum
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.cache/mill
+          key: mill-crosscheck-${{ hashFiles('polyglot/java-sdk/build.mill', 'polyglot/java-sdk/mill') }}
+          restore-keys: mill-crosscheck-
+      - name: Generate the corpus
+        run: |
+          mkdir -p xc
+          uv sync --frozen
+          uv run scripts/gen_v2_crosscheck.py "$VIZI_V2_CORPUS"
+      - name: Go replays it
+        working-directory: polyglot/go-sdk
+        run: VIZI_V2_VERDICTS="$GITHUB_WORKSPACE/xc/go.json" go test -count=1 -run TestCrossCheck ./...
+      - name: Rust replays it
+        working-directory: polyglot/rust-sdk
+        run: VIZI_V2_VERDICTS="$GITHUB_WORKSPACE/xc/rust.json" cargo test --locked --test crosscheck -- --ignored
+      - name: Java replays it
+        working-directory: polyglot/java-sdk
+        run: VIZI_V2_VERDICTS="$GITHUB_WORKSPACE/xc/java.json" ./mill --no-daemon sdk.test.testOnly vizi.plugin.javasdk.doorbell.CrossCheckTest
+      - name: Every column present, and no divergence
+        run: |
+          # A replayer that skipped writes no verdicts; the comparator only
+          # prints "not replayed by" for a missing column, so check first.
+          for lang in go rust java; do
+            test -s "xc/$lang.json" || { echo "::error::$lang wrote no verdicts"; exit 1; }
+          done
+          uv run scripts/compare_v2_verdicts.py --require-all xc/corpus.json xc/go.json xc/rust.json xc/java.json --out xc/cross_sdk.json

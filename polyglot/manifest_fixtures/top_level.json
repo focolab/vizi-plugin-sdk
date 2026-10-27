@@ -1,0 +1,141 @@
+{
+  "about": "Top-level fields: manifest_version is 1, the plugin id is lower-case reverse-DNS (^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)+$, 3 to 64 characters, its first part not a Windows device name), min_vizi is a PEP 440 version and sdk_version a non-empty string, both optional. Read by the Go, Rust and Java parsers' tests and by scripts/check_manifest_fixtures.py; expected.kind is 'invalid' (the message contains expected.message) or 'accepted'.",
+  "protocol": "1.0",
+  "cases": [
+    {
+      "name": "a reverse-DNS id with digits and underscores is accepted",
+      "json": {"manifest_version": 1, "id": "org.example2.my_tool", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "the shortest id is three characters",
+      "json": {"manifest_version": 1, "id": "a.b", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "the longest id is 64 characters",
+      "json": {"manifest_version": 1, "id": "org.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "an id with upper case is refused",
+      "json": {"manifest_version": 1, "id": "org.Example.tool", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'org.Example.tool' is not a plugin id"}
+    },
+    {
+      "name": "an id without a dot is refused",
+      "json": {"manifest_version": 1, "id": "exampletool", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'exampletool' is not a plugin id"}
+    },
+    {
+      "name": "an id of 65 characters is refused",
+      "json": {"manifest_version": 1, "id": "org.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "is not a plugin id"}
+    },
+    {
+      "name": "an id with a leading digit is refused",
+      "json": {"manifest_version": 1, "id": "1org.example", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id '1org.example' is not a plugin id"}
+    },
+    {
+      "name": "an id with a double dot is refused",
+      "json": {"manifest_version": 1, "id": "org..example", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'org..example' is not a plugin id"}
+    },
+    {
+      "name": "an id whose first part has an underscore is refused",
+      "json": {"manifest_version": 1, "id": "my_org.example", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'my_org.example' is not a plugin id"}
+    },
+    {
+      "name": "an id whose first part is a Windows device name is refused",
+      "json": {"manifest_version": 1, "id": "con.example", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'con.example' is not a plugin id: its first part 'con' is a Windows device name"}
+    },
+    {
+      "name": "an id whose first part is a numbered Windows device name is refused",
+      "json": {"manifest_version": 1, "id": "lpt1.tool", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'lpt1.tool' is not a plugin id: its first part 'lpt1' is a Windows device name"}
+    },
+    {
+      "name": "an id whose first part is a Windows device name in upper case is refused",
+      "json": {"manifest_version": 1, "id": "LPT1.tool", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'LPT1.tool' is not a plugin id: its first part 'LPT1' is a Windows device name"}
+    },
+    {
+      "name": "an id whose first part is com9 is refused",
+      "json": {"manifest_version": 1, "id": "com9.plugin", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'com9.plugin' is not a plugin id: its first part 'com9' is a Windows device name"}
+    },
+    {
+      "name": "an id whose first part is com0 is refused",
+      "json": {"manifest_version": 1, "id": "com0.plugin", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'com0.plugin' is not a plugin id: its first part 'com0' is a Windows device name"}
+    },
+    {
+      "name": "an id whose first part is lpt0 is refused",
+      "json": {"manifest_version": 1, "id": "lpt0.plugin", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "id 'lpt0.plugin' is not a plugin id: its first part 'lpt0' is a Windows device name"}
+    },
+    {
+      "name": "an id whose first part only begins with a device name is accepted",
+      "json": {"manifest_version": 1, "id": "console.example", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "an id whose first part is com10 is accepted",
+      "json": {"manifest_version": 1, "id": "com10.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "an id with a device name as a later part is accepted",
+      "json": {"manifest_version": 1, "id": "example.con", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "min_vizi and sdk_version are accepted in their forms",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "min_vizi": "1.0.0", "sdk_version": "1.0.0", "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a pre-release, post-release and dev min_vizi is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "min_vizi": "1.0rc2.post1.dev3", "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a min_vizi that is not a PEP 440 version is refused",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "min_vizi": "v0.9", "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "min_vizi 'v0.9' is not a PEP 440 version"}
+    },
+    {
+      "name": "a min_vizi that is not a string is refused",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "min_vizi": 0.9, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "min_vizi must be a string"}
+    },
+    {
+      "name": "an empty sdk_version is refused",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "sdk_version": "", "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "sdk_version must be a non-empty string"}
+    },
+    {
+      "name": "an sdk_version that is not a string is refused",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "sdk_version": 87, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "sdk_version must be a non-empty string"}
+    },
+    {
+      "name": "manifest_version 0 is refused",
+      "json": {"manifest_version": 0, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "manifest_version 0 unsupported"}
+    },
+    {
+      "name": "manifest_version 0 is refused for itself, not for a field it lacked",
+      "json": {"manifest_version": 0, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}, "contributions": {"tools": [{"id": "t", "views": ["3d"], "triggers": [{"button": "left"}]}]}},
+      "expected": {"kind": "invalid", "message": "manifest_version 0 unsupported"}
+    },
+    {
+      "name": "manifest_version true is refused: a boolean is not the integer 1",
+      "json": {"manifest_version": true, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "manifest_version"}
+    }
+  ]
+}

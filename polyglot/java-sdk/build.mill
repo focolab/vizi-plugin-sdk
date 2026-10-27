@@ -1,0 +1,97 @@
+//| mill-version: 1.1.3
+//| mill-jvm-version: 25
+package build
+import mill.*, javalib.*, javalib.publish.*, javalib.errorprone.*
+
+/** Flags every JVM that runs the SDK needs (FFM downcalls, and Netty's Unsafe on JDK 24+). */
+object Jvm {
+  val flags = Seq("--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow")
+  val grpc = "1.84.0"
+  val protobuf = "4.36.2"
+}
+
+/** The protoc artifacts on Maven Central are named by OS and architecture. */
+def protocClassifier: String = {
+  val os = System.getProperty("os.name").toLowerCase
+  val arch = System.getProperty("os.arch").toLowerCase match {
+    case "amd64" | "x86_64" => "x86_64"
+    case "aarch64" | "arm64" => "aarch_64"
+    case other => sys.error(s"no protoc build for architecture $other")
+  }
+  val o =
+    if (os.startsWith("linux")) "linux"
+    else if (os.startsWith("mac")) "osx"
+    else if (os.startsWith("windows")) "windows"
+    else sys.error(s"no protoc build for OS $os")
+  s"$o-$arch"
+}
+
+object sdk extends JavaModule, PublishModule, ErrorProneModule {
+  def artifactName = "vizi-sdk-java"
+  def publishVersion = "1.0.0"
+  def pomSettings = PomSettings(
+    description = "Java SDK for vizi plugins (protocol 1.0)",
+    organization = "org.focolab",
+    url = "https://github.com/focolab/vizi-plugin-sdk",
+    licenses = Seq(License.`Apache-2.0`),
+    versionControl = VersionControl.github("focolab", "vizi-plugin-sdk"),
+    developers = Seq()
+  )
+
+  def javacOptions = Seq("--release", "25", "-Xlint:all,-serial,-processing,-this-escape", "-encoding", "UTF-8")
+
+  def mvnDeps = Seq(
+    mvn"io.grpc:grpc-netty-shaded:${Jvm.grpc}",
+    mvn"io.grpc:grpc-stub:${Jvm.grpc}",
+    mvn"io.grpc:grpc-protobuf:${Jvm.grpc}",
+    mvn"com.google.protobuf:protobuf-java:${Jvm.protobuf}",
+    mvn"com.google.code.gson:gson:2.14.0",
+    mvn"org.jspecify:jspecify:1.0.1"
+  )
+
+  // NullAway over the SDK's own @NullMarked packages; generated wire code is not marked, so it is not checked.
+  def errorProneVersion = "2.50.0"
+  def errorProneUseNullAway = true
+  def errorProneNullAwayVersion = "0.14.1"
+  def errorProneOptions = Seq(
+    "-XepOpt:NullAway:OnlyNullMarked=true",
+    "-Xep:NullAway:ERROR",
+    "-XepDisableWarningsInGeneratedCode",
+    "-Xep:ArrayRecordComponent:OFF",
+    "-XepExcludedPaths:.*/generatedSources\\.dest/.*"
+  )
+
+  // ---- wire code: protoc on ../../proto at build time, never committed ----
+  def protoSrc = Task.Source(moduleDir / os.up / os.up / os.up / "proto")
+
+  def protocExe = Task {
+    val cls = protocClassifier
+    def fetch(group: String, artifact: String, version: String) = {
+      val f = Task.dest / s"$artifact-$version-$cls.exe"
+      val url = s"https://repo1.maven.org/maven2/${group.replace('.', '/')}/$artifact/$version/$artifact-$version-$cls.exe"
+      os.write(f, requests.get(url).bytes)
+      if (!scala.util.Properties.isWin) os.perms.set(f, "rwxr-xr-x")
+      PathRef(f)
+    }
+    (fetch("com.google.protobuf", "protoc", Jvm.protobuf), fetch("io.grpc", "protoc-gen-grpc-java", Jvm.grpc))
+  }
+
+  def generatedSources = Task {
+    val (protoc, grpc) = protocExe()
+    val out = Task.dest
+    val src = protoSrc().path
+    val protos = os.list(src).filter(_.ext == "proto").map(_.toString)
+    os.proc(protoc.path.toString, s"-I$src", s"--plugin=protoc-gen-grpc-java=${grpc.path}",
+      s"--java_out=$out", s"--grpc-java_out=$out", protos).call()
+    Seq(PathRef(out))
+  }
+
+  def forkArgs = Jvm.flags
+
+  object test extends JavaTests, TestModule.Junit5 {
+    def jupiterVersion = "5.13.4"
+    def forkArgs = Jvm.flags ++ Seq("-Xss4m")
+    def javacOptions = Seq("--release", "25", "-encoding", "UTF-8")
+    def forkEnv = super.forkEnv() ++ Map("VIZI_SDK_REPO" -> (moduleDir / os.up / os.up / os.up / os.up).toString)
+  }
+}

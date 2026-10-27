@@ -1,0 +1,4 @@
+{
+ "about": "Mismatches between a stated outcome and the Python SDK that are known and not yet fixed. Each entry selects cases by field (a trailing * matches a prefix) and must match at least one mismatch, or consume.py fails as stale.",
+ "known": []
+}

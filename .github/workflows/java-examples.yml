@@ -1,0 +1,59 @@
+name: Java examples
+
+# Each example's Java implementation (examples/*/java) against the Java SDK
+# from this checkout: its own test suite, which checks the code against the
+# example's SPEC and its committed vizi-plugin.json.  Linux only, on pull
+# requests and the nightly run; like the macOS and Windows legs of the SDK's
+# workflow, a push to master does not run it.
+on:
+  pull_request:
+    paths:
+      - 'examples/*/java/**'
+      - 'examples/*/SPEC.md'
+      - 'polyglot/java-sdk/**'
+      - 'proto/**'
+      - 'docs/spec/manifest_schema.md'
+      - '.github/workflows/java-examples.yml'
+  workflow_dispatch:
+  # Nightly at 03:00 UTC, with the SDK's other nightly legs.
+  schedule:
+    - cron: '0 3 * * *'
+
+# A newer PR update on the same ref cancels the run it supersedes; the nightly
+# run has a group of its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  examples:
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.cache/mill
+          key: mill-java-examples-${{ hashFiles('polyglot/java-sdk/build.mill', 'polyglot/java-sdk/mill', 'examples/*/java/build.mill') }}
+          restore-keys: mill-java-examples-
+      # The examples resolve org.focolab:vizi-sdk-java from ~/.m2 (m2Local).
+      - name: Publish the SDK to ~/.m2
+        working-directory: polyglot/java-sdk
+        run: ./mill --no-daemon sdk.publishM2Local
+      - name: Each example's tests
+        run: |
+          status=0
+          for d in examples/*/java; do
+            echo "::group::$d"
+            (cd "$d" || exit 1; ../../../polyglot/java-sdk/mill --no-daemon __.test) || { echo "::error::$d failed"; status=1; }
+            echo "::endgroup::"
+          done
+          exit $status

@@ -1,0 +1,538 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.hostsim_fixture",
+  "name": "Emulator Fixture",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      ".venv/bin/python",
+      "plugin.py"
+    ]
+  },
+  "permissions": [
+    "data_access",
+    "contribute_rois"
+  ],
+  "contributions": {
+    "readers": [
+      {
+        "id": "ramp",
+        "name": "Ramp",
+        "extensions": [
+          ".ramp"
+        ]
+      },
+      {
+        "id": "stack",
+        "name": "Stack",
+        "extensions": [
+          ".stack",
+          ".ome.stack"
+        ],
+        "fallback_extensions": [
+          ".h5"
+        ]
+      },
+      {
+        "id": "slow",
+        "name": "Slow",
+        "extensions": [
+          ".slow"
+        ]
+      }
+    ],
+    "exporters": [
+      {
+        "id": "stats",
+        "name": "Stats CSV",
+        "extension": ".csv"
+      }
+    ],
+    "overlays": [
+      {
+        "id": "labels",
+        "name": "Labels",
+        "segment_mib": 4
+      },
+      {
+        "id": "chunks",
+        "name": "Chunks",
+        "chunked": true
+      }
+    ],
+    "commands": [
+      {
+        "id": "fixture.compile",
+        "title": "Compile labels",
+        "menu": null
+      },
+      {
+        "id": "fixture.chunk_misuse",
+        "title": "Misuse the chunked overlay",
+        "menu": null
+      },
+      {
+        "id": "fixture.series",
+        "title": "Which image",
+        "menu": null
+      },
+      {
+        "id": "fixture.rois",
+        "title": "Contribute a box",
+        "menu": null
+      },
+      {
+        "id": "fixture.blob",
+        "title": "Contribute a blob its plugin shapes",
+        "menu": null
+      },
+      {
+        "id": "fixture.raw_read",
+        "title": "Read raw and shared",
+        "menu": null
+      },
+      {
+        "id": "fixture.asset",
+        "title": "Request an asset",
+        "menu": null
+      },
+      {
+        "id": "fixture.progress",
+        "title": "Report progress",
+        "menu": null
+      },
+      {
+        "id": "fixture.track",
+        "title": "Extend a track",
+        "menu": null
+      },
+      {
+        "id": "fixture.picker_status",
+        "title": "Ask about a held picker",
+        "menu": null
+      },
+      {
+        "id": "fixture.inclusion",
+        "title": "Measure a region",
+        "menu": null
+      },
+      {
+        "id": "fixture.inclusion_box",
+        "title": "Measure a region inside a box",
+        "menu": null
+      },
+      {
+        "id": "fixture.inclusion_budget",
+        "title": "Measure a region past the host's budget",
+        "menu": null
+      },
+      {
+        "id": "fixture.roi_refusals",
+        "title": "Contribute values the host refuses",
+        "menu": null
+      },
+      {
+        "id": "fixture.big_window",
+        "title": "Ask for too much pose",
+        "menu": null
+      },
+      {
+        "id": "fixture.reads",
+        "title": "Read growing volumes",
+        "menu": null
+      },
+      {
+        "id": "fixture.reads_together",
+        "title": "Read volumes concurrently",
+        "menu": null
+      },
+      {
+        "id": "fixture.folders",
+        "title": "Report the plugin's folders",
+        "menu": null
+      },
+      {
+        "id": "fixture.needs_value",
+        "title": "Refuse a missing or ill-typed value argument",
+        "menu": null
+      },
+      {
+        "id": "fixture.unhandled",
+        "title": "Declared here, with no handler in plugin.py",
+        "menu": null
+      },
+      {
+        "id": "fixture.activate",
+        "title": "Ask to activate a tool this plugin does not declare",
+        "menu": null
+      },
+      {
+        "id": "fixture.bad_patches",
+        "title": "Patch the panel in ways the host refuses",
+        "menu": null
+      },
+      {
+        "id": "fixture.read_status",
+        "title": "Ask about a read the host is holding",
+        "menu": null
+      },
+      {
+        "id": "fixture.hang_up",
+        "title": "Hang up the doorbell",
+        "menu": null
+      },
+      {
+        "id": "fixture.pick",
+        "title": "A picker fired",
+        "menu": null
+      },
+      {
+        "id": "fixture.subs",
+        "title": "Report the subscribed pushes",
+        "menu": null
+      },
+      {
+        "id": "fixture.save_path",
+        "title": "Ask where to save",
+        "menu": null
+      },
+      {
+        "id": "fixture.colormap",
+        "title": "Read a colormap",
+        "menu": null
+      },
+      {
+        "id": "fixture.rois_by_id",
+        "title": "Read named regions",
+        "menu": null
+      },
+      {
+        "id": "fixture.pickers_set",
+        "title": "Set every picker's value",
+        "menu": null
+      },
+      {
+        "menu": null,
+        "id": "fixture.pickers_bad",
+        "title": "Set every picker wrongly"
+      },
+      {
+        "id": "fixture.list_ops",
+        "title": "Drive the results list",
+        "menu": null
+      },
+      {
+        "id": "fixture.late_patch",
+        "title": "Patch a panel that is not open",
+        "menu": null
+      },
+      {
+        "id": "fixture.list_bad",
+        "title": "Send the list ops the host refuses",
+        "menu": null
+      },
+      {
+        "id": "fixture.jump",
+        "title": "Jump the view",
+        "menu": null
+      },
+      {
+        "id": "fixture.forge_cause",
+        "title": "Name a cause the host never minted",
+        "menu": null
+      },
+      {
+        "id": "fixture.follow_mode",
+        "title": "How the next Follow drives",
+        "menu": null
+      },
+      {
+        "id": "fixture.follow_log",
+        "title": "What each Follow saw",
+        "menu": null
+      },
+      {
+        "id": "fixture.reserve_parked",
+        "title": "Reserve an overlay item and park it",
+        "menu": null
+      },
+      {
+        "id": "fixture.release_parked",
+        "title": "Send the parked item",
+        "menu": null
+      },
+      {
+        "id": "fixture.long_honours",
+        "title": "Long work that honors Cancel",
+        "menu": null
+      },
+      {
+        "id": "fixture.long_ignores",
+        "title": "Long work that ignores Cancel",
+        "menu": null
+      },
+      {
+        "id": "fixture.background",
+        "title": "Background work",
+        "menu": null
+      },
+      {
+        "id": "fixture.table_fill",
+        "title": "Fill the table",
+        "menu": null
+      },
+      {
+        "id": "fixture.table_bad",
+        "title": "Table ops the host refuses",
+        "menu": null
+      },
+      {
+        "id": "fixture.table_big",
+        "title": "A table larger than one message",
+        "menu": null
+      },
+      {
+        "id": "fixture.table_burst",
+        "title": "Many small table patches",
+        "menu": null
+      },
+      {
+        "id": "fixture.geometry",
+        "title": "The image sizes heard",
+        "menu": null
+      },
+      {
+        "id": "fixture.appearance",
+        "title": "The appearances heard",
+        "menu": null
+      },
+      {
+        "id": "fixture.table_held",
+        "title": "Fill a table whose panel is closed",
+        "menu": null
+      },
+      {
+        "id": "fixture.table_held_bad",
+        "title": "Send bad table ops while the panel is closed",
+        "menu": null
+      }
+    ],
+    "panels": [
+      {
+        "id": "fixture",
+        "title": "Fixture",
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "label",
+              "id": "status",
+              "text": "idle"
+            },
+            {
+              "kind": "button",
+              "id": "go",
+              "text": "Compile",
+              "command": "fixture.compile"
+            },
+            {
+              "kind": "progress",
+              "id": "bar",
+              "value": 0
+            },
+            {
+              "kind": "label",
+              "id": "picked",
+              "text": ""
+            },
+            {
+              "kind": "channel_picker",
+              "id": "ch",
+              "command": "fixture.pick",
+              "multiple": true,
+              "value": [
+                0
+              ]
+            },
+            {
+              "kind": "color_picker",
+              "id": "col",
+              "command": "fixture.pick",
+              "value": "#FF8800"
+            },
+            {
+              "kind": "colormap_picker",
+              "id": "cm",
+              "command": "fixture.pick",
+              "value": "gray"
+            },
+            {
+              "kind": "roi_picker",
+              "id": "roi",
+              "command": "fixture.pick",
+              "follows_selection": true
+            },
+            {
+              "kind": "list",
+              "id": "results",
+              "command": "fixture.pick",
+              "selectable": true,
+              "max_rows": 4,
+              "visible_rows": 3,
+              "row": [
+                {
+                  "kind": "label",
+                  "id": "rname",
+                  "text": ""
+                },
+                {
+                  "kind": "checkbox",
+                  "id": "rshow",
+                  "command": "fixture.pick",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "kind": "button",
+              "id": "jump",
+              "text": "Jump",
+              "command": "fixture.jump",
+              "moves_view": true
+            }
+          ]
+        },
+        "view_targets": [
+          "t",
+          "z",
+          "select_region",
+          "frame_region"
+        ]
+      },
+      {
+        "id": "late",
+        "title": "Late",
+        "root": {
+          "kind": "column",
+          "id": "lroot",
+          "children": [
+            {
+              "kind": "label",
+              "id": "lbl",
+              "text": "default"
+            },
+            {
+              "kind": "image",
+              "id": "pic"
+            }
+          ]
+        }
+      },
+      {
+        "id": "tour",
+        "title": "Tour",
+        "follow_targets": [
+          "t",
+          "z"
+        ],
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "label",
+              "id": "status",
+              "text": ""
+            }
+          ]
+        }
+      },
+      {
+        "id": "grid",
+        "title": "Grid",
+        "root": {
+          "kind": "column",
+          "id": "groot",
+          "children": [
+            {
+              "kind": "table",
+              "id": "stats",
+              "selectable": true,
+              "multiple": true,
+              "command": "fixture.pick",
+              "sortable": true,
+              "visible_rows": 6,
+              "columns": [
+                {
+                  "id": "name",
+                  "header": "Region"
+                },
+                {
+                  "id": "area",
+                  "header": "Area",
+                  "type": "number",
+                  "precision": 2,
+                  "unit": "px"
+                },
+                {
+                  "id": "kept",
+                  "header": "Kept",
+                  "type": "bool"
+                }
+              ]
+            },
+            {
+              "kind": "table",
+              "id": "plain",
+              "columns": [
+                {
+                  "id": "what"
+                }
+              ]
+            },
+            {
+              "kind": "image",
+              "id": "plot"
+            }
+          ]
+        }
+      },
+      {
+        "id": "shelf",
+        "title": "Shelf",
+        "root": {
+          "kind": "table",
+          "id": "held",
+          "selectable": true,
+          "multiple": true,
+          "command": "fixture.pick",
+          "columns": [
+            {
+              "id": "name"
+            },
+            {
+              "id": "n",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    ],
+    "region_types": [
+      {
+        "id": "fixture.blob",
+        "name": "Blob"
+      }
+    ]
+  },
+  "subscriptions": [
+    "epochs",
+    "view",
+    "regions",
+    "weather"
+  ]
+}

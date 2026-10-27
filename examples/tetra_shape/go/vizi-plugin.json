@@ -1,0 +1,20 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.tetra_shape",
+  "name": "Tetra Shape",
+  "version": "0.1.0",
+  "engines": {"vizi": "1.0"},
+  "entry": {"command": ["sh", "./launch.sh"]},
+  "contributions": {
+    "region_types": [
+      {"id": "tetra.volume", "name": "Tetrahedron (keeps its volume)"},
+      {"id": "tetra.unshaped", "name": "Tetrahedron (no shaper)"}
+    ],
+    "commands": [
+      {"id": "tetra.contribute", "title": "Contribute the tetrahedra", "menu": null}
+    ]
+  },
+  "min_vizi": "1.0.0",
+  "sdk_version": "1.0.0",
+  "permissions": ["contribute_rois"]
+}

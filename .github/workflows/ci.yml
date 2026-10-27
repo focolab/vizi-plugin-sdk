@@ -1,0 +1,117 @@
+# Sanity for the publish target: the wheel builds, imports, and the
+# committed stubs match the shipped .proto.  The protocol suite under tests/
+# runs in python.yml, on Linux, macOS and Windows.
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+# A newer push or PR update on the same ref cancels the run it supersedes; the
+# nightly run has a group of its own so a push never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: Runtime (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: protobuf-4-minimum
+            protobuf: protobuf==4.25.8
+            grpcio: grpcio==1.60.1
+          - name: current
+            protobuf: protobuf>=6.33,<7
+            grpcio: grpcio>=1.81,<2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+
+      - name: The API index lists every public name
+        run: |
+          pip install dist/*.whl "${{ matrix.protobuf }}" "${{ matrix.grpcio }}"
+          python scripts/gen-api-index.py --check
+
+      - name: Install + import smoke
+        run: |
+          pip install dist/*.whl "${{ matrix.protobuf }}" "${{ matrix.grpcio }}"
+          python - <<'EOF'
+          import vizi_plugin_sdk as sdk
+          import atomicshm  # a declared dependency, not a hand-install
+          from google.protobuf import __version__ as protobuf_version
+          import grpc
+          import json
+          import os
+          from pathlib import Path
+          import tempfile
+
+          print("exports:", ", ".join(sdk.__all__))
+          # Force the lazy exports to resolve: doorbell constants + decorators
+          # (numpy path) and both stub modules (protobuf + grpcio paths).
+          assert sdk.pb2.Hello is not None and sdk.pb2.HostMsg is not None
+          assert sdk.pb2_grpc is not None
+          assert callable(sdk.serve) and callable(sdk.reader)
+          with tempfile.TemporaryDirectory() as td:
+              asset = Path(td) / "model.bin"
+              asset.write_bytes(b"model")
+              os.environ["VIZI_PLUGIN_ASSETS"] = json.dumps({"model": str(asset)})
+              assert sdk.asset_path("model") == asset
+          from vizi_plugin_sdk import doorbell, server
+          assert (doorbell.PROTOCOL_MAJOR, doorbell.PROTOCOL_MINOR) == (server.PROTOCOL_MAJOR, server.PROTOCOL_MINOR) == (1, 0)
+          assert sdk.VIEW_2D != sdk.VIEW_3D and sdk.PHASE_PRESS is not None
+          hello = sdk.pb2.Hello(
+              protocol_major=server.PROTOCOL_MAJOR,
+              protocol_minor=server.PROTOCOL_MINOR,
+              session_token="compat-smoke",
+          )
+          assert sdk.pb2.Hello.FromString(hello.SerializeToString()) == hello
+          print("runtime:", protobuf_version, grpc.__version__)
+          EOF
+
+  stubs:
+    name: Stub freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Stub freshness (committed stubs match proto/)
+        # grpcio-tools is pinned to the version that generated the committed
+        # stubs — protoc output differs across versions, so an unpinned regen
+        # would flake on toolchain drift instead of catching real drift.
+        #
+        # Generate BOTH protos and apply BOTH relative-import rewrites, as
+        # the committed stubs were.  `scripts/regen-stubs.sh --check` performs
+        # the identical check locally; keep the two in step.
+        run: |
+          pip install grpcio-tools==1.60.1 'setuptools<81'
+          stub_dir="$(mktemp -d)"
+          python -m grpc_tools.protoc -I proto \
+            --python_out="$stub_dir" --grpc_python_out="$stub_dir" \
+            proto/vizi_plugin.proto proto/roi.proto
+          sed -i 's/^import vizi_plugin_pb2/from . import vizi_plugin_pb2/' \
+            "$stub_dir/vizi_plugin_pb2_grpc.py"
+          sed -i 's/^import roi_pb2/from . import roi_pb2/' \
+            "$stub_dir/vizi_plugin_pb2.py" "$stub_dir/roi_pb2_grpc.py"
+          # Report every stale stub, not just the first — `set -e` would stop at
+          # one and hide the rest.
+          status=0
+          for stub in vizi_plugin_pb2.py vizi_plugin_pb2_grpc.py \
+                      roi_pb2.py roi_pb2_grpc.py; do
+            diff "$stub_dir/$stub" "vizi_plugin_sdk/_proto/$stub" || status=1
+          done
+          exit "$status"

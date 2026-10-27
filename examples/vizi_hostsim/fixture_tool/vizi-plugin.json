@@ -1,0 +1,64 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.hostsim_tool_fixture",
+  "name": "Emulator Tool Fixture",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      ".venv/bin/python",
+      "plugin.py"
+    ]
+  },
+  "permissions": [],
+  "contributions": {
+    "tools": [
+      {
+        "id": "aim",
+        "name": "Aim",
+        "views": [
+          "2d",
+          "3d"
+        ],
+        "view_targets": [
+          "t",
+          "look_at"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "aim.next",
+        "title": "What the next FIRE asks",
+        "menu": null
+      },
+      {
+        "id": "aim.got",
+        "title": "The answer to a FIRE",
+        "menu": null
+      }
+    ],
+    "panels": [
+      {
+        "id": "aim",
+        "title": "Aim",
+        "view_targets": [
+          "t"
+        ],
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "label",
+              "id": "status",
+              "text": ""
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

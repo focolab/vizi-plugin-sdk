@@ -1,0 +1,7 @@
+# Line endings are LF in the repository and on checkout, on every platform.
+#
+# The Go SDK's CI gate is `gofmt -l`, which reports a file whose formatting
+# differs from canonical — and CRLF differs.  Without this, a Windows runner
+# checks the sources out with CRLF under the default core.autocrlf and the
+# gate fails on every file at once, before any test runs.
+* text=auto eol=lf

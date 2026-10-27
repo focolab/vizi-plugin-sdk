@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vizi-plugin-sdk"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+# The version is single-sourced from vizi_plugin_sdk/__init__.py's
+# __version__, because the handshake's identity string names it and a version
+# that lives only in packaging metadata is not carried by a vendored or
+# PYTHONPATH copy of the code.  It is the SDK's own version, not the vizi app
+# version and not the protocol's (the protocol is 1.0 and is stated by the
+# Ready fields; see vizi_plugin_sdk/server.py).
+dynamic = ["version"]
+description = "SDK for building out-of-process vizi plugins (protocol 1.0, spoken by vizi v1.0.0 and later)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Protocol runtime compatibility is validated at both ends of the range:
+    #  - protobuf 4.25–6.x: the committed protobuf-4.25 gencode also imports
+    #    under current protobuf, while remaining compatible with TensorFlow
+    #    2.15's protobuf<5 requirement.
+    #  - grpcio >=1.60.1: the control-plane transport and stub-generator floor.
+    #  - numpy: volume buffers cross the data plane as ndarrays using only
+    #    basic buffer ops (frombuffer/reshape/ascontiguousarray/dtype)
+    #    available since numpy 1.20.  The >=1.23 floor is deliberately low
+    #    so plugins can coexist with numpy-1.24-era compute deps (e.g.
+    #    StarDist pins numpy==1.24.4).  No upper pin — the host's <2 cap
+    #    is a host-side PyO3 constraint that does not apply to the plugin
+    #    process.
+    #  - atomicshm: the process-shared atomics a Pulsed lane needs
+    #    (`set_items_live`, the host's live-overlay scan).  A hard dependency,
+    #    so a plugin's live marker cannot fail at first use for want of it.
+    "atomicshm>=0.1,<0.2",
+    "grpcio>=1.60.1",
+    "numpy>=1.23",
+    "protobuf>=4.25,<7",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/focolab/vizi-plugin-sdk"
+Issues = "https://github.com/focolab/vizi-plugin-sdk/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vizi_plugin_sdk"]
+
+# The sdist is the package and nothing else from this repository; hatchling
+# adds README.md, LICENSE and NOTICE (the readme and license-files above) and
+# pyproject.toml itself.
+[tool.hatch.build.targets.sdist]
+only-include = ["vizi_plugin_sdk"]
+
+[tool.hatch.version]
+path = "vizi_plugin_sdk/__init__.py"

@@ -1,0 +1,6 @@
+#!/bin/sh
+# The launch line: never compiles, and execs, so vizi's process tree is the JVM.
+here=$(dirname "$0")
+JAVA=${JAVA:-java}
+[ -f "$here/.java-home" ] && JAVA="$(cat "$here/.java-home")/bin/java"
+exec "$JAVA" --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -jar "$here/build/plugin.jar" "$@"

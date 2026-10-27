@@ -1,0 +1,55 @@
+name: Protocol compatibility
+
+# The breaking-change check (compat/README.md): the IDL in proto/ against the
+# 1.0 baseline in compat/.  It fails on any change that would break a plugin
+# built against 1.0 when it meets a later 1.x host: a field or enum value
+# deleted without reserving its number, a field whose type or cardinality
+# changes incompatibly, a service or RPC deleted or retyped.
+on:
+  push:
+    paths:
+      - 'proto/**'
+      - 'vizi_plugin_sdk/_proto/**'
+      - 'compat/**'
+      - '.github/workflows/compat.yml'
+  pull_request:
+    paths:
+      - 'proto/**'
+      - 'vizi_plugin_sdk/_proto/**'
+      - 'compat/**'
+      - '.github/workflows/compat.yml'
+  workflow_dispatch:
+
+# A newer push or PR update on the same ref cancels the run it supersedes; the
+# nightly run has a group of its own so a push never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BUF_VERSION: v1.73.0
+  BUF_SHA256: 8f2986298ad08f0cc1bf999b9797b7c383adf32d7edf0f73d6f1e1a701baeac1
+  # The 1.0 baseline is frozen: a later minor never edits it (compat/README.md).
+  BASELINE_SHA256: 1bf2479bd99cc29537f8801307cedb2faf886894140e71352fbea45a5b3e4066
+
+jobs:
+  breaking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: buf, pinned and checked
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/buf" "https://github.com/bufbuild/buf/releases/download/$BUF_VERSION/buf-Linux-x86_64"
+          echo "$BUF_SHA256  $RUNNER_TEMP/buf" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/buf"
+
+      - name: The 1.0 baseline is the frozen one
+        run: echo "$BASELINE_SHA256  compat/vizi_plugin-1.0.binpb" | sha256sum -c -
+
+      - name: No breaking change against the 1.0 baseline
+        run: '"$RUNNER_TEMP/buf" breaking . --against compat/vizi_plugin-1.0.binpb --config compat/buf.yaml'

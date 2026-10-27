@@ -1,0 +1,66 @@
+{
+  "about": "A manifest whose engines.vizi this protocol (1.0) cannot run is refused for that, before any other check. Each case is run through the reference parser (scripts/check_manifest_fixtures.py) and through the Go, Rust and Java parsers' tests. expected.kind is 'engines_incompatible' (the distinct error, its message exactly expected.message), 'invalid' (any other refusal, its message containing expected.message) or 'accepted'.",
+  "protocol": "1.0",
+  "cases": [
+    {
+      "name": "a newer minor is refused for engines, not for the widget kind it added",
+      "json": {"manifest_version": 1, "id": "org.example.widgets", "name": "Widgets", "version": "1.2.0", "engines": {"vizi": "1.1"}, "entry": {"command": ["python3", "w.py"]}, "contributions": {"panels": [{"id": "p", "title": "P", "root": {"kind": "sparkline", "id": "s"}}]}},
+      "expected": {"kind": "engines_incompatible", "message": "Widgets 1.2.0 needs vizi protocol 1.1; this vizi speaks 1.0"}
+    },
+    {
+      "name": "a newer major is refused even when the rest is valid",
+      "json": {"manifest_version": 1, "id": "org.example.next", "name": "Next", "version": "3", "engines": {"vizi": "2.0"}, "entry": {"command": ["python3", "n.py"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Next 3 needs vizi protocol 2.0; this vizi speaks 1.0"}
+    },
+    {
+      "name": "an older major is refused",
+      "json": {"manifest_version": 1, "id": "org.example.old", "name": "Old", "version": "0.4", "engines": {"vizi": "0.9"}, "entry": {"command": ["python3", "o.py"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Old 0.4 needs vizi protocol 0.9; this vizi speaks 1.0"}
+    },
+    {
+      "name": "engines is read before manifest_version, and quoted as written",
+      "json": {"manifest_version": 2, "id": "org.example.later", "name": "Later", "version": "1", "engines": {"vizi": "^1.3"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Later 1 needs vizi protocol ^1.3; this vizi speaks 1.0"}
+    },
+    {
+      "name": "the sentence names the id when the name is missing",
+      "json": {"manifest_version": 1, "id": "org.example.anon", "version": "1", "engines": {"vizi": "1.1"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "engines_incompatible", "message": "org.example.anon 1 needs vizi protocol 1.1; this vizi speaks 1.0"}
+    },
+    {
+      "name": "a compatible engines takes the normal path: the unknown widget kind",
+      "json": {"manifest_version": 1, "id": "org.example.widgets", "name": "Widgets", "version": "1.2.0", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3", "w.py"]}, "contributions": {"panels": [{"id": "p", "title": "P", "root": {"kind": "sparkline", "id": "s"}}]}},
+      "expected": {"kind": "invalid", "message": "unknown widget kind 'sparkline'"}
+    },
+    {
+      "name": "a malformed engines string is also refused first, as an invalid manifest",
+      "json": {"manifest_version": 9, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": "1.0.3"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.0.3' is not a version"}
+    },
+    {
+      "name": "an engines.vizi that is not a string is an invalid manifest, not an engines refusal",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": 2}, "entry": {"command": ["python3"]}, "contributions": {"panels": [{"id": "p", "title": "P", "root": {"kind": "sparkline", "id": "s"}}]}},
+      "expected": {"kind": "invalid", "message": "vizi"}
+    },
+    {
+      "name": "an omitted engines reads as 1.0 and takes the normal order",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "entry": {"command": ["python3"]}, "contributions": {"panels": [{"id": "p", "title": "P", "root": {"kind": "sparkline", "id": "s"}}]}},
+      "expected": {"kind": "invalid", "message": "unknown widget kind 'sparkline'"}
+    },
+    {
+      "name": "an omitted engines is accepted as 1.0",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a present engines without vizi is refused in the normal order",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "missing required field"}
+    },
+    {
+      "name": "the forms of 1.0 are accepted",
+      "json": {"manifest_version": 1, "id": "org.example.x", "name": "X", "version": "1", "engines": {"vizi": ">=1.x"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    }
+  ]
+}

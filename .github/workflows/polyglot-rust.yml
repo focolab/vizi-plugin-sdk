@@ -1,0 +1,79 @@
+name: Rust SDK
+on:
+  push:
+    paths:
+      - 'polyglot/rust-sdk/**'
+      - 'proto/**'
+      - 'docs/spec/**'
+      - 'polyglot/manifest_fixtures/**'
+      - '.github/workflows/polyglot-rust.yml'
+  pull_request:
+    paths:
+      - 'polyglot/rust-sdk/**'
+      - 'proto/**'
+      - 'docs/spec/**'
+      - 'polyglot/manifest_fixtures/**'
+      - '.github/workflows/polyglot-rust.yml'
+  workflow_dispatch:
+  # Nightly at 03:00 UTC: the macOS and Windows legs, which a push to master skips.
+  schedule:
+    - cron: '0 3 * * *'
+
+# A newer push or PR update on the same ref cancels the run it supersedes; the
+# nightly run has a group of its own so a push never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Everything on Linux (the cheapest runner), on stable and on the MSRV:
+  # formatting, clippy and the tests with and without default features, and
+  # the docs.  Lints, feature gating and the pure logic are the same on every
+  # platform.
+  sdk:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, '1.88.0']
+    runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: polyglot/rust-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo clippy --locked --no-default-features --all-targets -- -D warnings
+      - run: cargo test --locked --all-targets
+      - run: cargo test --locked --no-default-features --all-targets
+      - run: cargo doc --locked --no-deps
+
+  # macOS and Windows: the build of every target, and the tests, on stable
+  # only -- the transport (unix sockets, named pipes and Winsock), the
+  # mappings, and install differ by platform, and a test run is what shows it.
+  platform:
+    # macOS and Windows run on pull requests, tag pushes and the nightly run;
+    # a push to master runs the Linux jobs only.
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: polyglot/rust-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo test --locked --all-targets

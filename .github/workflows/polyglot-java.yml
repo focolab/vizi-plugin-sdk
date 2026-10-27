@@ -1,0 +1,159 @@
+name: Java SDK
+
+# Runs only when the Java SDK itself changes, or the IDL it generates from at
+# build time, or the manifest schema its fixture test reads, so a commit
+# touching the other SDKs, the docs or the examples costs nothing here.
+on:
+  push:
+    paths:
+      - 'polyglot/java-sdk/**'
+      - 'proto/**'
+      - 'docs/spec/manifest_schema.md'
+      - 'polyglot/manifest_fixtures/**'
+      - '.github/workflows/polyglot-java.yml'
+  pull_request:
+    paths:
+      - 'polyglot/java-sdk/**'
+      - 'proto/**'
+      - 'docs/spec/manifest_schema.md'
+      - 'polyglot/manifest_fixtures/**'
+      - '.github/workflows/polyglot-java.yml'
+  workflow_dispatch:
+  # Nightly at 03:00 UTC: the macOS and Windows legs, which a push to master skips.
+  schedule:
+    - cron: '0 3 * * *'
+
+# A newer push or PR update on the same ref cancels the run it supersedes; the
+# nightly run has a group of its own so a push never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sdk:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS and Windows run on pull requests, tag pushes and the nightly run;
+        # a push to master runs Linux only.
+        os: ${{ fromJSON((github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')) && '["ubuntu-latest", "macos-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: polyglot/java-sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      # The committed ./mill bootstrap reads mill's version and the JDK from
+      # build.mill's header and fetches both; the caches keep a warm run short.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/Library/Caches/Coursier
+            ~/.cache/mill
+            ~/AppData/Local/Coursier/Cache
+            ~/AppData/Local/mill
+          key: mill-java-${{ matrix.os }}-${{ hashFiles('polyglot/java-sdk/build.mill', 'polyglot/java-sdk/mill', 'polyglot/java-sdk/mill.bat') }}
+          restore-keys: mill-java-${{ matrix.os }}-
+
+      # Linux: the repository's locked environment, for the cross-process
+      # atomics test against Python's atomicshm (NativeIoTest skips without it).
+      - if: runner.os == 'Linux'
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - if: runner.os == 'Linux'
+        working-directory: .
+        run: uv sync --frozen
+
+      # Linux runs everything.  macOS and Windows run the classes whose code
+      # differs by platform: the doorbell, the mappings and native I/O
+      # (Winsock and kernel32 on Windows), the bind probe, the real-transport
+      # emulator tests, and the root API (install, launchers, paths).  The
+      # whole SDK compiles on each either way, every native path included.
+      # Unix-only tests skip by assumption on Windows.
+      - if: runner.os == 'Linux'
+        run: ./mill --no-daemon sdk.test
+      - if: runner.os == 'macOS'
+        run: ./mill --no-daemon sdk.test.testOnly 'vizi.plugin.javasdk.doorbell.*' 'vizi.plugin.javasdk.memory.*' 'vizi.plugin.javasdk.nativeio.*' vizi.plugin.javasdk.control.BindProbeTest vizi.plugin.javasdk.HostEmulatorTest vizi.plugin.javasdk.RootApiTest
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./mill.bat --no-daemon sdk.test.testOnly 'vizi.plugin.javasdk.doorbell.*' 'vizi.plugin.javasdk.memory.*' 'vizi.plugin.javasdk.nativeio.*' vizi.plugin.javasdk.control.BindProbeTest vizi.plugin.javasdk.HostEmulatorTest vizi.plugin.javasdk.RootApiTest
+
+  # The jbang sample against its driver over real processes. (The examples'
+  # Java implementations run in their own workflows, such as stage-chain.yml.)
+  samples:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.cache/mill
+            ~/.m2/repository
+            ~/.jbang/cache
+          key: mill-java-samples-${{ hashFiles('polyglot/java-sdk/build.mill', 'polyglot/java-sdk/mill') }}
+          restore-keys: mill-java-samples-
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - name: Sync the locked environment, and point the launcher at it
+        run: |
+          uv sync --frozen
+          echo "VIZI_HOSTSIM_PYTHON=$(uv run python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: jbangdev/setup-jbang@main
+      - name: Publish the SDK to ~/.m2
+        working-directory: polyglot/java-sdk
+        run: ./mill --no-daemon sdk.publishM2Local
+      - name: "Export the sample (never at launch: the host's window is 10 s)"
+        working-directory: polyglot/java-sdk/example/voxel_probe
+        run: jbang export portable --force -O build/plugin.jar VoxelProbe.java
+      - name: voxel_probe against its driver
+        run: uv run python examples/voxel_probe/python/hostsim.py --plugin-dir polyglot/java-sdk/example/voxel_probe
+
+  # The doorbell cross-check corpus, replayed; the Java column belongs in
+  # crosscheck.yml's comparison too (see polyglot/CROSSCHECK.md).
+  crosscheck:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    env:
+      VIZI_V2_CORPUS: ${{ github.workspace }}/xc/corpus.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.cache/mill
+          key: mill-java-xc-${{ hashFiles('polyglot/java-sdk/build.mill', 'polyglot/java-sdk/mill') }}
+          restore-keys: mill-java-xc-
+      - name: Generate the corpus
+        run: |
+          mkdir -p xc
+          uv sync --frozen
+          uv run scripts/gen_v2_crosscheck.py "$VIZI_V2_CORPUS"
+      - name: Java replays it
+        working-directory: polyglot/java-sdk
+        run: VIZI_V2_VERDICTS="$GITHUB_WORKSPACE/xc/java.json" ./mill --no-daemon sdk.test.testOnly vizi.plugin.javasdk.doorbell.CrossCheckTest
+      - name: Verdicts written, and no divergence from the reference
+        run: |
+          test -s xc/java.json || { echo "::error::java wrote no verdicts"; exit 1; }
+          uv run scripts/compare_v2_verdicts.py --require-all xc/corpus.json xc/java.json --out xc/java_vs_corpus.json

@@ -1,0 +1,226 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.interactive_seg",
+  "name": "Interactive Segmentation",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      "./target/release/interactive-seg"
+    ]
+  },
+  "permissions": [
+    "data_access",
+    "contribute_rois"
+  ],
+  "contributions": {
+    "tools": [
+      {
+        "id": "seg.lasso",
+        "name": "Lasso segment",
+        "views": [
+          "2d"
+        ],
+        "actions": [],
+        "cancel_on_camera_move": true,
+        "menu": "tools",
+        "mode": "gesture",
+        "triggers": []
+      }
+    ],
+    "overlays": [
+      {
+        "id": "seg.trail",
+        "name": "Lasso trail",
+        "segment_mib": 32
+      },
+      {
+        "id": "seg.labels",
+        "name": "Segmentation",
+        "segment_mib": 64
+      }
+    ],
+    "commands": [
+      {
+        "id": "seg.set_min_size",
+        "title": "Set minimum size",
+        "menu": null
+      },
+      {
+        "id": "seg.set_threshold",
+        "title": "Set threshold scale",
+        "menu": null
+      },
+      {
+        "id": "seg.set_3d",
+        "title": "Set 3D growth",
+        "menu": null
+      },
+      {
+        "id": "seg.set_mode",
+        "title": "Set accumulate mode",
+        "menu": null
+      },
+      {
+        "id": "seg.set_region",
+        "title": "Set measured region",
+        "menu": null
+      },
+      {
+        "id": "seg.pick",
+        "title": "Activate lasso",
+        "menu": null
+      },
+      {
+        "id": "seg.commit",
+        "title": "Commit to annotations",
+        "menu": null
+      },
+      {
+        "id": "seg.measure",
+        "title": "Measure over time",
+        "menu": null
+      },
+      {
+        "id": "seg.reset",
+        "title": "Clear segmentation",
+        "menu": null
+      }
+    ],
+    "panels": [
+      {
+        "id": "seg",
+        "title": "Interactive Segmentation",
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "button",
+              "id": "pick",
+              "text": "Select region…",
+              "command": "seg.pick",
+              "moves_view": false
+            },
+            {
+              "kind": "row",
+              "id": "rsize",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lsize",
+                  "text": "Minimum size (voxels)"
+                },
+                {
+                  "kind": "slider",
+                  "id": "size",
+                  "command": "seg.set_min_size",
+                  "min": 1.0,
+                  "max": 5000.0,
+                  "step": 10.0,
+                  "value": 50.0,
+                  "float": false,
+                  "moves_view": false
+                }
+              ]
+            },
+            {
+              "kind": "row",
+              "id": "rthresh",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lthresh",
+                  "text": "Threshold ×"
+                },
+                {
+                  "kind": "slider",
+                  "id": "thresh",
+                  "command": "seg.set_threshold",
+                  "min": 0.5,
+                  "max": 2.0,
+                  "step": 0.05,
+                  "value": 1.0,
+                  "float": true,
+                  "moves_view": false
+                }
+              ]
+            },
+            {
+              "kind": "checkbox",
+              "id": "grow3d",
+              "command": "seg.set_3d",
+              "text": "Grow through Z",
+              "value": true,
+              "moves_view": false
+            },
+            {
+              "kind": "dropdown",
+              "id": "mode",
+              "command": "seg.set_mode",
+              "options": [
+                "Replace",
+                "Add"
+              ],
+              "value": "Replace",
+              "moves_view": false
+            },
+            {
+              "kind": "button",
+              "id": "commit",
+              "text": "Commit to annotations",
+              "command": "seg.commit",
+              "moves_view": false
+            },
+            {
+              "kind": "row",
+              "id": "rmeasure",
+              "children": [
+                {
+                  "kind": "dropdown",
+                  "id": "region",
+                  "command": "seg.set_region",
+                  "options": [
+                    "(none)"
+                  ],
+                  "value": "(none)",
+                  "moves_view": false
+                },
+                {
+                  "kind": "button",
+                  "id": "measure",
+                  "text": "Measure",
+                  "command": "seg.measure",
+                  "moves_view": false
+                }
+              ]
+            },
+            {
+              "kind": "image",
+              "id": "plot",
+              "moves_view": false
+            },
+            {
+              "kind": "button",
+              "id": "reset",
+              "text": "Clear",
+              "command": "seg.reset",
+              "moves_view": false
+            },
+            {
+              "kind": "label",
+              "id": "status",
+              "text": "Ready"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "assets": [],
+  "min_vizi": "1.0.0",
+  "sdk_version": "1.0.0",
+  "subscriptions": []
+}

@@ -1,0 +1,22 @@
+#!/bin/sh
+# Builds build/plugin.jar (the plugin and every dependency, one jar) and records, in .java-home,
+# the JDK 25+ the launcher runs it with. Publishes the Java SDK to ~/.m2 first, from this checkout.
+# The launcher never builds: run this once after a checkout or a change.
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+sdk="$here/../../../polyglot/java-sdk"
+(cd "$sdk" && ./mill --no-daemon sdk.publishM2Local)
+cd "$here"
+"$sdk/mill" --no-daemon assembly
+mkdir -p build
+cp out/assembly.dest/out.jar build/plugin.jar
+
+java=${JAVA_HOME:+$JAVA_HOME/bin/}java
+home=$("$java" -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.home = //p')
+major=$("$java" -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.specification.version = //p')
+if [ -z "$home" ] || [ "${major:-0}" -lt 25 ]; then
+  echo "assemble: '$java' is not a JDK 25 or later (java.specification.version=${major:-?}); set JAVA_HOME" >&2
+  exit 1
+fi
+printf '%s\n' "$home" > .java-home
+echo "assembled build/plugin.jar; the launcher runs it with $home"

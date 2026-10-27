@@ -1,0 +1,130 @@
+{
+  "assets": [],
+  "contributions": {
+    "commands": [
+      {
+        "id": "quant.channel",
+        "menu": null,
+        "title": "Measure a channel"
+      },
+      {
+        "id": "quant.pick",
+        "menu": null,
+        "title": "Select a region"
+      },
+      {
+        "id": "quant.brightest",
+        "menu": null,
+        "title": "Go to the brightest frame"
+      },
+      {
+        "id": "quant.export",
+        "menu": null,
+        "title": "Export region means"
+      }
+    ],
+    "panels": [
+      {
+        "follow_targets": [
+          "frame_region"
+        ],
+        "id": "quant",
+        "root": {
+          "children": [
+            {
+              "command": "quant.channel",
+              "id": "channel",
+              "kind": "channel_picker",
+              "moves_view": false,
+              "multiple": false,
+              "value": 0
+            },
+            {
+              "command": "quant.pick",
+              "id": "regions",
+              "kind": "list",
+              "max_rows": 1024,
+              "moves_view": true,
+              "row": [
+                {
+                  "id": "name",
+                  "kind": "label",
+                  "text": ""
+                },
+                {
+                  "id": "voxels",
+                  "kind": "label",
+                  "text": ""
+                },
+                {
+                  "id": "mean",
+                  "kind": "label",
+                  "text": ""
+                },
+                {
+                  "id": "swatch",
+                  "kind": "image",
+                  "moves_view": false
+                }
+              ],
+              "selectable": true,
+              "visible_rows": 8
+            },
+            {
+              "command": "quant.brightest",
+              "id": "brightest",
+              "kind": "button",
+              "moves_view": true,
+              "text": "Brightest frame"
+            },
+            {
+              "command": "quant.export",
+              "id": "export",
+              "kind": "button",
+              "moves_view": false,
+              "text": "Export CSV…"
+            },
+            {
+              "id": "tracing",
+              "kind": "label",
+              "text": ""
+            },
+            {
+              "id": "status",
+              "kind": "label",
+              "text": "Ready"
+            }
+          ],
+          "id": "root",
+          "kind": "column"
+        },
+        "title": "Region Quant",
+        "view_targets": [
+          "t",
+          "select_region"
+        ]
+      }
+    ]
+  },
+  "engines": {
+    "vizi": "1.0"
+  },
+  "entry": {
+    "command": [
+      "./launch.sh"
+    ]
+  },
+  "id": "org.example.region_quant",
+  "manifest_version": 1,
+  "name": "Region Quant",
+  "permissions": [
+    "data_access"
+  ],
+  "min_vizi": "1.0.0",
+  "sdk_version": "1.0.0",
+  "subscriptions": [
+    "view",
+    "regions"
+  ],
+  "version": "0.1.0"
+}

@@ -1,0 +1,7 @@
+vizi-plugin-sdk
+Copyright 2026 the vizi-plugin-sdk authors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Rex Kerr is the author of the Go, Rust and Java SDKs (polyglot/), the host
+emulator (examples/vizi_hostsim/) and the examples.

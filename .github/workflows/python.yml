@@ -1,0 +1,217 @@
+# The reference SDK on the three platforms it has arms for.
+#
+# `vizi_plugin_sdk/doorbell.py` has a SEQPACKET arm (Linux), a DGRAM arm with
+# SO_NOSIGPIPE and the SO_RCVBUF raise (macOS), and a loopback-TCP arm with
+# the token handshake (Windows); `memory.py` maps a memfd, a file, or a named
+# section.  The suite under `tests/` runs on all three.
+#
+# The emulator jobs run the only live checks the repository has without a
+# vizi host: a real plugin process over real sockets, SCM_RIGHTS grants and
+# a real mapping.  They need AF_UNIX + SCM_RIGHTS, so no Windows leg; the
+# Windows doorbell is exercised by the unit tests' stream arm and by
+# `tests/_windows_shape_probe.py` on every OS.
+name: Python SDK
+
+on:
+  push:
+    paths:
+      - 'vizi_plugin_sdk/**'
+      - 'tests/**'
+      - 'proto/**'
+      - 'examples/vizi_hostsim/**'
+      - 'examples/peak_roi/python/**'
+      - 'examples/voxel_probe/python/**'
+      - 'examples/format_bridge/python/**'
+      - 'examples/format_bridge/fixtures/**'
+      - 'examples/format_bridge/interop/**'
+      - 'examples/interactive_seg/python/**'
+      - 'examples/ray_probe/python/**'
+      - 'examples/movie_seg/python/**'
+      - 'examples/stage_chain/python/**'
+      - 'examples/region_quant/python/**'
+      - 'examples/tetra_shape/python/**'
+      - 'scripts/regen-stubs.sh'
+      - 'scripts/check-env.py'
+      - 'scripts/control_cases/**'
+      - 'scripts/check_manifest_fixtures.py'
+      - 'polyglot/manifest_fixtures/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/python.yml'
+  pull_request:
+    paths:
+      - 'vizi_plugin_sdk/**'
+      - 'tests/**'
+      - 'proto/**'
+      - 'examples/vizi_hostsim/**'
+      - 'examples/peak_roi/python/**'
+      - 'examples/voxel_probe/python/**'
+      - 'examples/format_bridge/python/**'
+      - 'examples/format_bridge/fixtures/**'
+      - 'examples/format_bridge/interop/**'
+      - 'examples/interactive_seg/python/**'
+      - 'examples/ray_probe/python/**'
+      - 'examples/movie_seg/python/**'
+      - 'examples/stage_chain/python/**'
+      - 'examples/region_quant/python/**'
+      - 'examples/tetra_shape/python/**'
+      - 'scripts/regen-stubs.sh'
+      - 'scripts/check-env.py'
+      - 'scripts/control_cases/**'
+      - 'scripts/check_manifest_fixtures.py'
+      - 'polyglot/manifest_fixtures/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/python.yml'
+  workflow_dispatch:
+  # Nightly at 03:00 UTC: the macOS and Windows legs, which a push to master skips.
+  schedule:
+    - cron: '0 3 * * *'
+
+# A newer push or PR update on the same ref cancels the run it supersedes; the
+# nightly run has a group of its own so a push never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Linux runs every test on both Pythons.  macOS and Windows run, on one
+  # Python, the modules whose behaviour differs by platform: the doorbell
+  # (socket types, named pipes), the mappings, install and the asset paths,
+  # and the server over the platform's transport.  The rest is pure logic.
+  tests:
+    name: tests (${{ matrix.os }}, py${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS and Windows run on pull requests, tag pushes and the nightly run;
+        # a push to master runs the two Linux legs only.
+        include: >-
+          ${{ fromJSON((github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')) && '[{"os": "ubuntu-latest", "python": "3.11", "only": ""}, {"os": "ubuntu-latest", "python": "3.13", "only": ""}, {"os": "macos-latest", "python": "3.11", "only": "test_doorbell test_memory test_declare test_assets test_server"}, {"os": "windows-latest", "python": "3.11", "only": "test_doorbell test_memory test_declare test_assets test_server"}]' || '[{"os": "ubuntu-latest", "python": "3.11", "only": ""}, {"os": "ubuntu-latest", "python": "3.13", "only": ""}]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Sync the locked environment
+        run: uv sync --frozen
+      - name: Environment check
+        run: uv run scripts/check-env.py
+      - name: Unit tests (real socketpairs, real mappings)
+        if: matrix.only == ''
+        run: uv run python -m unittest discover -s tests
+      - name: Unit tests, the platform-specific modules
+        if: matrix.only != ''
+        working-directory: tests
+        run: uv run --project .. python -m unittest ${{ matrix.only }}
+
+  # The control-plane forward-compatibility cases (scripts/control_cases/):
+  # what a 1.0 plugin does with a kind, field or enum value from a later 1.x
+  # host.  The fixture is regenerated from its committed recording and must
+  # match, and every outcome the specification states is checked through the
+  # SDK's control plane.
+  control-cases:
+    name: control-plane cases (ubuntu-latest, py3.11)
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - name: Sync the locked environment
+        run: uv sync --frozen
+      - name: The committed cases match this tree
+        run: uv run python -I -B scripts/control_cases/gen.py --check
+      - name: Every stated outcome, through the control plane
+        run: uv run python -I -B scripts/control_cases/consume.py
+      - name: The ports' manifest fixtures, through the reference parser
+        run: uv run python -I -B scripts/check_manifest_fixtures.py
+
+  # Every driver on Linux.  On macOS the emulator differs only in its doorbell
+  # socket (DGRAM, where Linux has SEQPACKET), which the self-check covers.
+  emulator:
+    name: emulator (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')) && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - name: Sync the locked environment
+        run: uv sync --frozen
+      # The example manifests name `.venv/bin/python`; there is no per-example
+      # venv here, so the emulator's launcher substitutes the interpreter
+      # named by VIZI_HOSTSIM_PYTHON.  That is an EMULATOR convenience, not
+      # the host's rule: vizi runs `entry.command` as written.
+      - name: Point the launcher at the synced interpreter
+        run: echo "VIZI_HOSTSIM_PYTHON=$(uv run python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - name: peak_roi -- self-test and 16 scenarios
+        if: runner.os == 'Linux'
+        working-directory: examples/peak_roi/python
+        run: |
+          uv run --project ../../.. python selftest.py
+          uv run --project ../../.. python hostsim.py
+      - name: voxel_probe -- 17 scenarios (a tool, two overlays, the live lane, an action FIRE)
+        if: runner.os == 'Linux'
+        working-directory: examples/voxel_probe/python
+        run: uv run --project ../../.. python hostsim.py
+      - name: vizi_hostsim self-check -- 27 scenarios (readers and the §1.2 replacement handshake, exporters, compile, masks, ROIs, assets, a chunked overlay and its refusals)
+        working-directory: examples/vizi_hostsim
+        run: uv run --project ../../.. python selfcheck.py
+      - name: format_bridge -- self-test and 32 scenarios (a reader and an exporter over G and X, the replacement handshake, both calibration paths, two sessions)
+        if: runner.os == 'Linux'
+        working-directory: examples/format_bridge/python
+        run: |
+          uv run --project ../../.. python selftest.py
+          uv run --project ../../.. python hostsim.py
+      - name: interactive_seg -- self-test and 23 scenarios (a lasso on the lane, a label volume, the commit into masks, the measure)
+        if: runner.os == 'Linux'
+        working-directory: examples/interactive_seg/python
+        run: |
+          uv run --project ../../.. python selftest.py
+          uv run --project ../../.. python hostsim.py
+      - name: ray_probe -- self-test and 22 scenarios (rays through a pyramid, the aim on the lane, actions inside a gesture, two panels, ellipsoid ROIs)
+        if: runner.os == 'Linux'
+        working-directory: examples/ray_probe/python
+        run: |
+          uv run --project ../../.. python selftest.py
+          uv run --project ../../.. python hostsim.py
+
+      - name: movie_seg -- self-test and 20 scenarios (a chunked overlay -- host-sized arenas, the want set, a static overlay, the tables, a dataset change, the deferred publish)
+        if: runner.os == 'Linux'
+        working-directory: examples/movie_seg/python
+        run: |
+          uv run --project ../../.. python selftest.py
+          uv run --project ../../.. python hostsim.py
+      - name: region_quant -- 21 scenarios (the view and region subscriptions, a list with a swatch per row, set-view from a row and a button, brightest answered from a precomputed trace, the channel picker, a Follow tour taken back and resumed, export through the save dialog, 70 regions, datasets that change channels, float data and none, a relaunch)
+        if: runner.os == 'Linux'
+        working-directory: examples/region_quant/python
+        run: uv run --project ../../.. python hostsim.py
+      - name: tetra_shape -- 14 scenarios (four contributed tetrahedra; two declared regions the host enacts, one through 12 bindings and a STAR surface; an asked region whose shaper keeps the volume; a rejection, a spinbox edit, a cancel, silent drops, a type with no shaper)
+        if: runner.os == 'Linux'
+        working-directory: examples/tetra_shape/python
+        run: uv run --project ../../.. python hostsim.py
+      - name: stage_chain -- 11 scenarios (two plugin processes on one S ring -- planning, relayed hints, odd positions, a refusal, an added channel and a relayout, params per position, a missed deadline, a re-arm mid-turn, a session lost mid-turn, a larger ring by supersede)
+        if: runner.os == 'Linux'
+        working-directory: examples/stage_chain/python
+        run: uv run --project ../../.. python hostsim.py
+
+  stubs:
+    name: stub freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - name: Committed stubs match proto/
+        run: scripts/regen-stubs.sh --check

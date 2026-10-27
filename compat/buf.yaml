@@ -1,0 +1,22 @@
+# The breaking-change check against the 1.0 baseline (compat/README.md).
+#
+# WIRE is buf's binary-wire category: a field or enum value deleted without
+# reserving its number, a field whose type or cardinality changes
+# incompatibly, a field moved into or out of a oneof, a package change, an
+# RPC whose request, response or streaming changes.  The two rules added to it
+# are the ones gRPC puts on the wire as well: the method path is
+# /<package>.<Service>/<Method>, so deleting or renaming a service or an RPC
+# breaks a built plugin's calls.
+#
+# Not checked, because a built plugin never sees them: field and enum-value
+# NAMES (the wire carries numbers; generated code in a port does change, and a
+# rename is still a source break for anyone regenerating), JSON names, and
+# language options.
+version: v2
+modules:
+  - path: proto
+breaking:
+  use:
+    - WIRE
+    - SERVICE_NO_DELETE
+    - RPC_NO_DELETE

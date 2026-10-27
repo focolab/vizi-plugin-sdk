@@ -1,0 +1,146 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.format_bridge",
+  "name": "Crate Format Bridge",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "min_vizi": "1.0.0",
+  "sdk_version": "1.0.0",
+  "entry": {
+    "command": [
+      "./format-bridge"
+    ]
+  },
+  "permissions": [
+    "data_access"
+  ],
+  "assets": [
+    {
+      "id": "calibration",
+      "name": "Crate sensor calibration v1",
+      "filename": "vizi-crate-cal.bin",
+      "size": 32,
+      "sha256": "20845d7cc64ec17ab899a993c1138352828823e55ebc1959f257a28e528671d3",
+      "source": {
+        "kind": "manual"
+      }
+    }
+  ],
+  "contributions": {
+    "readers": [
+      {
+        "id": "crate",
+        "name": "Crate volume container",
+        "extensions": [
+          ".crate"
+        ]
+      }
+    ],
+    "exporters": [
+      {
+        "id": "crate",
+        "name": "Crate volume container",
+        "extension": ".crate"
+      }
+    ],
+    "commands": [
+      {
+        "id": "crate.set_verify",
+        "title": "Verify CRC-32 on volume reads",
+        "menu": null
+      },
+      {
+        "id": "crate.describe",
+        "title": "Describe active dataset",
+        "menu": null
+      },
+      {
+        "id": "crate.pick_calibration",
+        "title": "Use a different calibration",
+        "menu": null
+      },
+      {
+        "id": "crate.check_file",
+        "title": "Check a crate file…",
+        "menu": "tools",
+        "default_keybinding": "Ctrl+Shift+K"
+      }
+    ],
+    "panels": [
+      {
+        "id": "crate",
+        "title": "Crate",
+        "menu_label": "Crate bridge…",
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "label",
+              "id": "head",
+              "text": "No crate open"
+            },
+            {
+              "kind": "label",
+              "id": "status",
+              "text": "Ready"
+            },
+            {
+              "kind": "row",
+              "id": "rvox",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lvox",
+                  "text": "Voxel size"
+                },
+                {
+                  "kind": "label",
+                  "id": "vox",
+                  "text": "(unknown)"
+                }
+              ]
+            },
+            {
+              "kind": "row",
+              "id": "rcal",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lcal",
+                  "text": "Calibration"
+                },
+                {
+                  "kind": "label",
+                  "id": "cal",
+                  "text": "(not provisioned)"
+                }
+              ]
+            },
+            {
+              "kind": "checkbox",
+              "id": "verify",
+              "command": "crate.set_verify",
+              "text": "Verify CRC-32 on volume reads",
+              "value": true
+            },
+            {
+              "kind": "button",
+              "id": "describe",
+              "text": "Describe active dataset",
+              "command": "crate.describe"
+            },
+            {
+              "kind": "button",
+              "id": "pickcal",
+              "text": "Use a different calibration…",
+              "command": "crate.pick_calibration"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

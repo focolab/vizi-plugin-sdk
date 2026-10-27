@@ -1,0 +1,1053 @@
+{
+ "recording": {
+  "sdk_and_examples_clean": true
+ },
+ "inputs_sha256": {
+  "roi_pb2.py": "349986a6afa6a78dba0feba4acf8347eeba75d6c3deca62cf82ff1469d86b6b6",
+  "vizi_plugin_pb2.py": "6ce704bdae4c74f0fadbf087e6f41dd2c6400190abc6dc3a5a08f579f64fdb13",
+  "control.py class tables": "f862a6250481c171d02d7fa7a3af886668cf15f1c6d423d1b53c5792f33480b6",
+  "reply tables": "61f1a2be5bfa6ebbd3d2212c0b977663aebc307049557932e9182f5ecfcc0c9e"
+ },
+ "total": 2451,
+ "families": 101,
+ "by_injection": {
+  "example:new-arm:PatchOp.12": 1,
+  "example:new-arm:Value.7": 1,
+  "example:new-field-on-common-message": 1,
+  "example:new-host-kind:push": 1,
+  "example:new-host-kind:with-id": 1,
+  "example:new-widget-kind": 1,
+  "id-collision:peer": 26,
+  "id-collision:same-direction": 26,
+  "id-reuse:different-content": 53,
+  "id-reuse:identical-resend": 53,
+  "paired:plan-and-arm:arm-input-only": 1,
+  "paired:plan-and-arm:both": 1,
+  "paired:plan-and-arm:both-inputs": 1,
+  "paired:plan-and-arm:plan-input-only": 1,
+  "paired:restatement:both": 5,
+  "paired:restatement:restatement-only": 5,
+  "protocol-minor:1": 2,
+  "protocol-minor:99": 2,
+  "reply-kind:wrong": 254,
+  "unknown-enum:1000": 116,
+  "unknown-enum:max+1": 116,
+  "unknown-field:fixed32": 413,
+  "unknown-field:fixed64": 413,
+  "unknown-field:length-delimited": 413,
+  "unknown-field:varint": 413,
+  "unknown-oneof-arm": 131
+ },
+ "by_expected": {
+  "deduplicated": 53,
+  "diagnostic-only": 47,
+  "handshake-refused": 2,
+  "ignored": 1667,
+  "item-refused": 9,
+  "manifest-refused": 1,
+  "not-a-violation": 255,
+  "session-continues": 2,
+  "session-faulted": 361,
+  "unsupported": 54
+ },
+ "by_receiver": {
+  "host": 1144,
+  "plugin": 1307
+ },
+ "selfcheck": {
+  "enum_ok": 232,
+  "field_ok": 1652,
+  "oneof_ok": 131
+ },
+ "class_gaps": {
+  "HostMsg": {
+   "arms_without_class": [],
+   "classes_without_arm": []
+  },
+  "PluginMsg": {
+   "arms_without_class": [],
+   "classes_without_arm": []
+  }
+ },
+ "anchors": {
+  "handshake": "control_plane_protocol.md \u00a73.1 \"The host sends `Hello{protocol_major, protocol_minor, session_token}`\"",
+  "major": "control_plane_protocol.md \u00a73.1 \"The version match is on the MAJOR, and both ends check.\"",
+  "minor_serves": "control_plane_protocol.md \u00a73.2 \"A `1.1` host serves a `1.0` plugin\"",
+  "append_only": "control_plane_protocol.md \u00a73.2 \"Within a major the wire is append-only\"",
+  "rule1": "control_plane_protocol.md \u00a74 \"1. Every message that deserves a reply carries an id unique on its session\"",
+  "reuse": "control_plane_protocol.md \u00a74 \"7. A second message under a used id is a protocol error, except a re-send.\"",
+  "one_reply": "control_plane_protocol.md \u00a74 \"8. A pending request's id belongs to its reply alone.\"",
+  "after_handshake": "control_plane_protocol.md \u00a711 \"The unknown-kind rule applies only after the handshake.\"",
+  "ready_ceiling": "control_plane_protocol.md \u00a73.1 \"`Ready.protocol_minor` MUST NOT exceed the host's `Hello` minor.\"",
+  "rule5": "control_plane_protocol.md \u00a74 \"5. An unmatched id is never silently discarded.\"",
+  "reack": "control_plane_protocol.md \u00a75.5 \"4. The re-ack rule: a re-sent arrangement is acknowledged again\"",
+  "content": "control_plane_protocol.md \u00a75.5 \"The same identity carrying *different content* is a\"",
+  "fwd": "control_plane_protocol.md \u00a711 \"Forward compatibility is not a violation.\"",
+  "kind": "control_plane_protocol.md \u00a711 \"An unknown message KIND is the same, with one obligation added.\"",
+  "arm_plan": "processing_stages.md \u00a74 \"no answered `PlanStage` for its `stage_id`, `input` and `params` stands behind\"",
+  "plan_refused": "processing_stages.md \u00a73 \"A stage that cannot work on the offered input answers `Error` naming why\"",
+  "arm_refused": "processing_stages.md \u00a74 \"`STAGE_ARM_REFUSED`; the arrangement's deadline\"",
+  "binding_refused": "control_plane_protocol.md \u00a75.5 \"names no statement either, so a receiver refuses it and does\"",
+  "widget_kind": "manifest_schema.md \u00a73.3.1 \"Unknown kinds are rejected\""
+ },
+ "per_family": {
+  "HostMsg.hello": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 1 (42 seen; smallest non-empty chosen)",
+   "cases": {
+    "protocol-minor": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.open_reader": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 13 (30 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 8,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.read_volume": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded format_bridge/python#1 seq 22 (40 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.read_plane": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 21 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.metadata": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 29 (10 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.close_reader": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 52 (8 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.shutdown": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#2 seq 966 (41 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.invoke_command": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded interactive_seg/python#1 seq 29 (223 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-field": 20,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.open_export": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded format_bridge/python#1 seq 229 (14 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-enum": 4,
+    "unknown-field": 32,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.export_chunk": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 144 (18 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-enum": 6,
+    "unknown-field": 20,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.finish_export": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 150 (9 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.abort_export": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 156 (6 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.view_state": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 438 (60 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 6,
+    "unknown-field": 32,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.data_volume": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded region_quant/python#1 seq 57 (289 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 6,
+    "unknown-field": 36,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.host_error": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded region_quant/python#1 seq 1592 (33 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.rois": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 482 (28 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 22,
+    "unknown-field": 84,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.label_volume_compiled": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 213 (3 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.mask_voxels": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 218 (3 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.tool_activation_changed": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded interactive_seg/python#1 seq 33 (1 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.asset_result": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 408 (10 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.rois_contributed": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#4 seq 1058 (16 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.install_segment": {
+   "class": "ARRANGEMENT",
+   "baseline_source": "recorded stage_chain/python#5 seq 99 (76 seen; smallest non-empty chosen)",
+   "cases": {
+    "paired": 2,
+    "unknown-enum": 4,
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.tool_binding": {
+   "class": "ARRANGEMENT",
+   "baseline_source": "recorded examples/vizi_hostsim#2 seq 921 (6 seen; smallest non-empty chosen)",
+   "cases": {
+    "paired": 2,
+    "unknown-enum": 6,
+    "unknown-field": 16,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.epoch_change": {
+   "class": "ARRANGEMENT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 286 (10 seen; smallest non-empty chosen)",
+   "cases": {
+    "paired": 2,
+    "unknown-enum": 4,
+    "unknown-field": 36,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.grant_state_query": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 166 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.retire_segment": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 67 (12 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.panel_opened": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#2 seq 935 (26 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.time_mapping": {
+   "class": "ARRANGEMENT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 284 (5 seen; smallest non-empty chosen)",
+   "cases": {
+    "paired": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.doorbell_shutdown": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 914 (5 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 4,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.release_loan": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 79 (235 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.contract_violation": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 562 (25 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.chunks_wanted": {
+   "class": "HOST_COALESCING",
+   "baseline_source": "recorded movie_seg/python#1 seq 210 (20 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.roi_poses_extended": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 299 (1 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.request_status": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 459 (2 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.roi_inclusion": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 333 (173 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.plan_stage": {
+   "class": "HOST_REQUEST",
+   "baseline_source": "recorded stage_chain/python#1 seq 25 (58 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 9,
+    "unknown-enum": 2,
+    "unknown-field": 24,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.stage_arm": {
+   "class": "ARRANGEMENT",
+   "baseline_source": "recorded stage_chain/python#7 seq 131 (35 seen; smallest non-empty chosen)",
+   "cases": {
+    "paired": 2,
+    "unknown-enum": 4,
+    "unknown-field": 28,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.save_path_result": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 512 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.view_changed": {
+   "class": "HOST_COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 749 (37 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 24,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.regions_changed": {
+   "class": "HOST_COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 5 (29 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.colormap_table": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 500 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.view_request_result": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 677 (30 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 4,
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.follow_started": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 731 (11 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.follow_ended": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 760 (11 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.cancel_work": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 892 (9 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "HostMsg.shape_drag": {
+   "class": "HOST_COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#4 seq 1060 (14 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 24,
+    "unknown-field": 92,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.shape_commit": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#4 seq 1062 (8 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 24,
+    "unknown-field": 92,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.shape_edit_ended": {
+   "class": "HOST_ONE_WAY",
+   "baseline_source": "recorded examples/vizi_hostsim#4 seq 1064 (10 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.widget_geometry": {
+   "class": "HOST_COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 564 (10 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "HostMsg.appearance": {
+   "class": "HOST_COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 3 (44 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.ready": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded peak_roi/python#1 seq 2 (42 seen; smallest non-empty chosen)",
+   "cases": {
+    "protocol-minor": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.reader_opened": {
+   "class": "REPLY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 14 (20 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.segment": {
+   "class": "REPLY",
+   "baseline_source": "recorded format_bridge/python#1 seq 41 (30 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.metadata": {
+   "class": "REPLY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 86 (8 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.closed": {
+   "class": "REPLY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 53 (8 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.error": {
+   "class": "REPLY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 163 (51 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.command_done": {
+   "class": "REPLY",
+   "baseline_source": "recorded interactive_seg/python#1 seq 153 (219 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 20,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "PluginMsg.panel_patch": {
+   "class": "COALESCING",
+   "baseline_source": "recorded interactive_seg/python#1 seq 12 (1066 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 80,
+    "unknown-oneof-arm": 5
+   }
+  },
+  "PluginMsg.export_opened": {
+   "class": "REPLY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 143 (14 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.chunk_written": {
+   "class": "REPLY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 146 (14 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.export_done": {
+   "class": "REPLY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 151 (13 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.overlay_update": {
+   "class": "COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 797 (33 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 20,
+    "unknown-field": 80,
+    "unknown-oneof-arm": 7
+   }
+  },
+  "PluginMsg.overlay_remove": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded interactive_seg/python#1 seq 40 (39 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.get_view_state": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 130 (60 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.read_data_volume": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 227 (291 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 12,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.contribute_rois": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 374 (22 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-enum": 22,
+    "unknown-field": 84,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.get_rois": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 325 (29 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.compile_label_volume": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 270 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-enum": 20,
+    "unknown-field": 80,
+    "unknown-oneof-arm": 7
+   }
+  },
+  "PluginMsg.read_mask_voxels": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 217 (3 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 12,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.activate_tool": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded interactive_seg/python#1 seq 32 (2 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.request_asset": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 385 (12 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.release_deposit": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 219 (469 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.grant_ack": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 7 (95 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 16,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "PluginMsg.tool_binding_ack": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#2 seq 922 (6 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.epoch_ack": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 287 (10 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.time_mapping_ack": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 285 (5 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.grant_state": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 169 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 4,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.segment_released": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 44 (37 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.release_request": {
+   "class": "ONE_SHOT",
+   "baseline_source": "synthesized: no driver sends it, so the baseline is the mechanical minimum and no peer has accepted it",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.doorbell_fault": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded movie_seg/python#1 seq 354 (2 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.doorbell_final_report": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded movie_seg/python#1 seq 356 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.contract_violation": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded stage_chain/python#13 seq 210 (7 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.segment_shortfall": {
+   "class": "COALESCING",
+   "baseline_source": "recorded format_bridge/python#1 seq 131 (1 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.shutdown_report": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 917 (41 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.overlay_chunk": {
+   "class": "COALESCING",
+   "baseline_source": "recorded movie_seg/python#1 seq 155 (32 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 4,
+    "unknown-field": 16,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "PluginMsg.overlay_label_table": {
+   "class": "COALESCING",
+   "baseline_source": "recorded movie_seg/python#1 seq 47 (7 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 4,
+    "unknown-field": 20,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "PluginMsg.extend_roi_poses": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 312 (7 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.request_status_query": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 386 (2 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.read_roi_inclusion": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded region_quant/python#1 seq 41 (186 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.stage_planned": {
+   "class": "REPLY",
+   "baseline_source": "recorded stage_chain/python#1 seq 14 (40 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 20,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.stage_arm_ack": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded stage_chain/python#3 seq 80 (32 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.request_save_path": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 515 (5 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.get_colormap": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 499 (5 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.view_request": {
+   "class": "PLUGIN_REQUEST",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 676 (30 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-collision": 2,
+    "id-reuse": 2,
+    "reply-kind": 11,
+    "unknown-field": 20,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.offer_follow": {
+   "class": "COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 770 (13 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.follow_state": {
+   "class": "COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 732 (13 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 16,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.end_follow": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 754 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 8,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.series_list": {
+   "class": "REPLY",
+   "baseline_source": "recorded examples/vizi_hostsim#1 seq 70 (4 seen; smallest non-empty chosen)",
+   "cases": {
+    "id-reuse": 2,
+    "unknown-enum": 2,
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.work_progress": {
+   "class": "COALESCING",
+   "baseline_source": "recorded examples/vizi_hostsim#3 seq 974 (133 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-field": 12,
+    "unknown-oneof-arm": 2
+   }
+  },
+  "PluginMsg.shape_proposal": {
+   "class": "COALESCING",
+   "baseline_source": "recorded tetra_shape/python#1 seq 22 (12 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  },
+  "PluginMsg.shape_answer": {
+   "class": "ONE_SHOT",
+   "baseline_source": "recorded tetra_shape/python#1 seq 24 (8 seen; smallest non-empty chosen)",
+   "cases": {
+    "unknown-enum": 2,
+    "unknown-field": 12,
+    "unknown-oneof-arm": 1
+   }
+  }
+ }
+}

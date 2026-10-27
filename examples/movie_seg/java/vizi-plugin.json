@@ -1,0 +1,111 @@
+{
+  "manifest_version": 1,
+  "id": "org.example.movie_seg",
+  "name": "Movie seg",
+  "version": "0.1.0",
+  "engines": {
+    "vizi": "1.0"
+  },
+  "min_vizi": "1.0.0",
+  "sdk_version": "1.0.0",
+  "entry": {
+    "command": [
+      "./movie-seg"
+    ]
+  },
+  "contributions": {
+    "commands": [
+      {
+        "id": "movie_seg.threshold",
+        "title": "Set threshold",
+        "menu": null
+      },
+      {
+        "id": "movie_seg.band_visible",
+        "title": "Show or hide a band",
+        "menu": null
+      },
+      {
+        "id": "movie_seg.band_1",
+        "title": "Show band 1 (dim)",
+        "menu": null
+      },
+      {
+        "id": "movie_seg.band_2",
+        "title": "Show band 2 (mid)",
+        "menu": null
+      },
+      {
+        "id": "movie_seg.band_3",
+        "title": "Show band 3 (bright)",
+        "menu": null
+      }
+    ],
+    "panels": [
+      {
+        "id": "movie_seg",
+        "title": "Movie seg",
+        "root": {
+          "kind": "column",
+          "id": "root",
+          "children": [
+            {
+              "kind": "row",
+              "id": "rt",
+              "children": [
+                {
+                  "kind": "label",
+                  "id": "lt",
+                  "text": "Threshold"
+                },
+                {
+                  "kind": "line_edit",
+                  "id": "threshold",
+                  "command": "movie_seg.threshold",
+                  "value": "400"
+                }
+              ]
+            },
+            {
+              "kind": "checkbox",
+              "id": "band_1",
+              "command": "movie_seg.band_1",
+              "text": "Band 1 (dim)",
+              "value": true
+            },
+            {
+              "kind": "checkbox",
+              "id": "band_2",
+              "command": "movie_seg.band_2",
+              "text": "Band 2 (mid)",
+              "value": true
+            },
+            {
+              "kind": "checkbox",
+              "id": "band_3",
+              "command": "movie_seg.band_3",
+              "text": "Band 3 (bright)",
+              "value": true
+            }
+          ]
+        }
+      }
+    ],
+    "overlays": [
+      {
+        "id": "bands",
+        "name": "Intensity bands",
+        "chunked": true
+      },
+      {
+        "id": "footprint",
+        "name": "Footprint",
+        "chunked": true,
+        "time": "static"
+      }
+    ]
+  },
+  "permissions": [
+    "data_access"
+  ]
+}

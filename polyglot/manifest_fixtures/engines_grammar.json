@@ -1,0 +1,291 @@
+{
+  "about": "The engines.vizi grammar: at most one leading prefix, exactly '>=', '^' or '~'; then MAJOR, MAJOR.MINOR or MAJOR.x, MAJOR and MINOR each one or more ASCII digits (leading zeros allowed, so '01.0' is 1.0); 'MAJOR' and 'MAJOR.x' read as minor 0. No whitespace anywhere (nothing is trimmed), no sign, no underscore, no other digit characters, no third component, no '*' or 'X'. Each component is at most 4294967295; a larger one is not a version, never wrapped or clamped. Anything else is refused as an invalid manifest before any other check: a component with a minus sign ('-1.0', '1.-1') as 'engines.vizi '...' has a negative component', and the rest as 'engines.vizi '...' is not a version'. Read by the Go, Rust and Java parsers' tests and by scripts/check_manifest_fixtures.py; expected.kind is 'accepted', 'engines_incompatible' (a version this protocol cannot run, the message exactly expected.message) or 'invalid' (the message contains expected.message).",
+  "protocol": "1.0",
+  "cases": [
+    {
+      "name": "major.minor is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a '>=' prefix is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": ">=1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a '^' prefix is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "^1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a '~' prefix is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "~1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a leading zero in the major is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "01.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "leading zeros in the minor are accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.00"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "leading zeros after a prefix are accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "^001.000"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "the largest minor, 4294967295, is a version",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.4294967295"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Grammar 1 needs vizi protocol 1.4294967295; this vizi speaks 1.0"}
+    },
+    {
+      "name": "the largest major, 4294967295, is a version",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "4294967295.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Grammar 1 needs vizi protocol 4294967295.0; this vizi speaks 1.0"}
+    },
+    {
+      "name": "a leading-zero version is quoted as written",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "01.1"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Grammar 1 needs vizi protocol 01.1; this vizi speaks 1.0"}
+    },
+    {
+      "name": "a major alone is accepted as minor 0",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a major alone after '^' is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "^1"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "an 'x' minor is accepted as minor 0",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.x"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "an 'x' minor after '>=' is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": ">=1.x"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "an 'x' minor after '~' is accepted",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "~1.x"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "accepted"}
+    },
+    {
+      "name": "a newer major alone is a version",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "2"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Grammar 1 needs vizi protocol 2; this vizi speaks 1.0"}
+    },
+    {
+      "name": "a newer major with an 'x' minor is a version",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "2.x"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Grammar 1 needs vizi protocol 2.x; this vizi speaks 1.0"}
+    },
+    {
+      "name": "the largest major alone is a version",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "4294967295"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "engines_incompatible", "message": "Grammar 1 needs vizi protocol 4294967295; this vizi speaks 1.0"}
+    },
+    {
+      "name": "two prefixes '^^' are refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "^^1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '^^1.0' is not a version"}
+    },
+    {
+      "name": "two prefixes '^~' are refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "^~1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '^~1.0' is not a version"}
+    },
+    {
+      "name": "two prefixes '~>=' are refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "~>=1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '~>=1.0' is not a version"}
+    },
+    {
+      "name": "two prefixes '>=>=' are refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": ">=>=1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '>=>=1.0' is not a version"}
+    },
+    {
+      "name": "a '+' prefix is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "+1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '+1.0' is not a version"}
+    },
+    {
+      "name": "a '-' prefix is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "-1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '-1.0' has a negative component"}
+    },
+    {
+      "name": "a '=' prefix is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "=1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '=1.0' is not a version"}
+    },
+    {
+      "name": "a '>' prefix is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": ">1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '>1.0' is not a version"}
+    },
+    {
+      "name": "a 'v' prefix is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "v1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi 'v1.0' is not a version"}
+    },
+    {
+      "name": "a prefix alone is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": ">="}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '>=' is not a version"}
+    },
+    {
+      "name": "an empty string is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": ""}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '' is not a version"}
+    },
+    {
+      "name": "a capital 'X' minor is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.X"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.X' is not a version"}
+    },
+    {
+      "name": "a '*' minor is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.*"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.*' is not a version"}
+    },
+    {
+      "name": "an 'x' major is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "x.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi 'x.0' is not a version"}
+    },
+    {
+      "name": "an 'x' after a third component is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.0.x"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.0.x' is not a version"}
+    },
+    {
+      "name": "a missing minor is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1."}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.' is not a version"}
+    },
+    {
+      "name": "a missing major is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": ".0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '.0' is not a version"}
+    },
+    {
+      "name": "two dots are refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1..0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1..0' is not a version"}
+    },
+    {
+      "name": "three components are refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.0.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.0.0' is not a version"}
+    },
+    {
+      "name": "a signed minor is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.-1"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.-1' has a negative component"}
+    },
+    {
+      "name": "a plus-signed minor is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.+0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.+0' is not a version"}
+    },
+    {
+      "name": "a leading space is refused, not trimmed",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": " 1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi ' 1.0' is not a version"}
+    },
+    {
+      "name": "a trailing space is refused, not trimmed",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.0 "}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.0 ' is not a version"}
+    },
+    {
+      "name": "a space after the prefix is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": ">= 1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '>= 1.0' is not a version"}
+    },
+    {
+      "name": "a space before the dot is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1 .0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1 .0' is not a version"}
+    },
+    {
+      "name": "a space after the dot is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1. 0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1. 0' is not a version"}
+    },
+    {
+      "name": "a leading tab is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "\t1.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "is not a version"}
+    },
+    {
+      "name": "a trailing newline is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.0\n"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "is not a version"}
+    },
+    {
+      "name": "an underscore in the major is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1_0.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1_0.0' is not a version"}
+    },
+    {
+      "name": "an underscore in the minor is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.0_0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.0_0' is not a version"}
+    },
+    {
+      "name": "Arabic-Indic digits are refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "١.٠"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '١.٠' is not a version"}
+    },
+    {
+      "name": "fullwidth digits are refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "１.０"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '１.０' is not a version"}
+    },
+    {
+      "name": "a non-ASCII digit in the minor is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.٠"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.٠' is not a version"}
+    },
+    {
+      "name": "a minor above 4294967295 is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1.4294967296"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1.4294967296' is not a version"}
+    },
+    {
+      "name": "a major above 4294967295 is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "4294967296.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '4294967296.0' is not a version"}
+    },
+    {
+      "name": "a 20-digit major is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "99999999999999999999.0"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '99999999999999999999.0' is not a version"}
+    },
+    {
+      "name": "a major alone above 4294967295 is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "4294967296"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '4294967296' is not a version"}
+    },
+    {
+      "name": "an 'x' version above 4294967295 is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "4294967296.x"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '4294967296.x' is not a version"}
+    },
+    {
+      "name": "a space before an 'x' minor is refused",
+      "json": {"manifest_version": 1, "id": "org.example.grammar", "name": "Grammar", "version": "1", "engines": {"vizi": "1. x"}, "entry": {"command": ["python3"]}},
+      "expected": {"kind": "invalid", "message": "engines.vizi '1. x' is not a version"}
+    }
+  ]
+}

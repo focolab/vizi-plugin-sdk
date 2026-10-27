@@ -1,0 +1,552 @@
+syntax = "proto3";
+
+package pois_math.v1;
+
+// ============================================================================
+// POI / ROI scheme — wire contract.
+//
+// The comments below cite `spec.md`: pois_math's ROI scheme, which is not
+// published with the plugin SDK. control_plane_protocol.md §8.8 restates
+// what a plugin needs of it.
+//
+// A region of interest is PURE DATA (the messages below) plus BEHAVIOR resolved
+// by `type_name` from a registry. In-process the behavior is a local function;
+// across a process/language boundary it is a method on the RoiBehavior service.
+// The two are the SAME contract — a "lambda" is a gRPC call you happen to
+// service locally. That equivalence is the generalization requirement: an
+// external program serves a type by implementing RoiBehavior, produces ROIs by
+// emitting Roi messages, and consumes them by reading Roi and either computing
+// locally (if it knows the type) or calling back to the server that does.
+//
+// Coordinates are ZYX voxel-index space (numpy-native), matching vizi. Anything
+// involving angles / lengths / arcs / ellipsoid radii is converted to physical
+// space (voxel spacing) at use; see spec.md §"Coordinate spaces".
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// Core data
+// ---------------------------------------------------------------------------
+
+message Vec3 {
+  // double (not float): the reference is numpy float64 and conformance holds to
+  // 1e-9; float32's ~1e-7 truncation through (de)serialization would break it.
+  double z = 1;
+  double y = 2;
+  double x = 3;
+}
+
+// Whether a display element (edge or facet) is drawn, is part of the enclosing
+// surface used for voxel inclusion (§8), or both. BOTH is the norm and the proto3
+// default. ENCLOSING is "invisibly part of the surface" — it shapes inclusion but
+// is never rendered (an internal crop face, an unseen boundary edge); DRAWN is the
+// surprising case (a decoration / scaffold line that does NOT define the surface),
+// so it must be asked for explicitly. This is a STRUCTURAL property of the ROI
+// definition; whether a DRAWN/BOTH element is *actually shown right now* is a
+// separate, transient view concern (selection, visibility toggles) and never
+// changes the surface. (spec.md §9.1/§9.2.)
+enum ElementRole {
+  ELEMENT_BOTH = 0;      // drawn AND part of the enclosing surface
+  ELEMENT_DRAWN = 1;     // drawn only — decoration/scaffold, not in the surface
+  ELEMENT_ENCLOSING = 2; // enclosing surface only, not drawn ("invisibly part of it")
+}
+
+enum DofMode {
+  PRIMARY = 0;   // axis drag: motion along frame axis 0
+  SECONDARY = 1; // plane drag: motion in the plane spanned by frame axes 1,2
+  ALL = 2;       // any direction permitted by dof_mask
+}
+
+// Where a PRIMARY handle's drag axis comes from (spec.md §4). FRAME uses the stored
+// `frame[:,0]` (a fixed intrinsic axis, e.g. a box face along +X). RADIAL derives it
+// live as the unit direction from `extent_anchor` to the handle, so it reorients as
+// the surface reshapes (a SurfQ6 curvature control pulled round). A stored radial
+// direction would go stale the moment a neighbour moved the control; deriving it from
+// the positions the bindings already maintain keeps the axis from ever desyncing.
+enum AxisSource {
+  AXIS_FRAME = 0;  // primary axis = frame[:,0]
+  AXIS_RADIAL = 1; // primary axis = normalize(position - extent_anchor.position)
+}
+
+// Which voxel lattice a point snaps to IF the view rounds it. Integers are voxel
+// corners, half-integers are centers (spec.md §2); the two differ by half a voxel
+// and are not interchangeable. The *rounding* itself stays a per-site view
+// concern; this only declares the target lattice when it happens.
+enum QuantizeLattice {
+  QUANTIZE_NONE = 0;   // continuous — not rounded
+  QUANTIZE_CORNER = 1; // integer lattice (voxel corners; boxes use this)
+  QUANTIZE_CENTER = 2; // half-integer lattice (voxel centers)
+}
+
+// A handle's permitted motion. `frame` is a local basis (columns = local axes,
+// ZYX); `dof_mask` bit i set => local axis i is free. Generalizes vizi's current
+// world-XYZ lock (drag_state.py `_AXES = np.eye(3)`): the default identity frame
+// with mask 0b111 reproduces today's behavior exactly.
+message HandleSpec {
+  repeated double frame = 1;  // 9 doubles, row-major 3x3
+  DofMode mode = 2;
+  uint32 dof_mask = 3;
+
+  // Optional PRIMARY-axis extent clamp (spec.md §3/§4). The signed projection of
+  // the handle along its primary axis, measured from `extent_anchor`'s position,
+  // is clamped into [min_extent, max_extent]; a clamp that bites returns
+  // Resolution.CLAMPED. Active only when min/max is set and mode == PRIMARY.
+  // Keeps a star ray's radius positive (anchor = center, min_extent = ε > 0), so a
+  // star-convex surface can be dragged by its points without inverting.
+  int32 extent_anchor = 4;        // vertex index the extent is measured from
+  optional double min_extent = 5; // lower bound on the signed primary-axis projection
+  optional double max_extent = 6; // upper bound
+
+  // Where the PRIMARY drag axis comes from (default AXIS_FRAME = today's frame[:,0]).
+  // AXIS_RADIAL derives it live from `extent_anchor` -> this handle, so it reorients
+  // as the surface is reshaped instead of staying frozen at build time.
+  AxisSource axis_source = 7;
+}
+
+// Appearance of a draggable handle (spec.md §9.3), carried as ROI data so a
+// handle's meaning travels with the region across the wire — a programmatically
+// built region can declare "this handle is small and red" without the viewer's
+// hardcoded conventions. A Roi owns a palette (`handle_styles`) and each
+// `Vertex.style_index` selects an entry.
+message HandleStyle {
+  string color = 1; // CSS hex, e.g. "#ffd24a"
+  double size = 2;  // multiplier on the view's screen-constant handle diameter (1.0 = default)
+  int32 shape = 3;  // marker shape: 0 = ball, 1 = cube (a view-owned vocabulary)
+}
+
+// Marks a vertex's `direction` as DRAWN + DRAGGABLE (spec.md §3): a 3D arrow from
+// the vertex along its direction, with a grabbable tip you drag to re-aim it.
+// `metric` => the length is meaningful and the arrow reaches `position + direction`;
+// otherwise the direction is orientation-only (a unit vector — the tip rides a
+// fixed-radius sphere about the point, the radius view-chosen so the 3D angle is
+// easy to set). `style_index` selects the arrow's color from `handle_styles`.
+// Absent => the direction (if any) stays the stored-only frame vector it was before.
+message DirectionHandle {
+  bool metric = 1;       // length meaningful (reach position+direction) vs orientation-only (unit)
+  int32 style_index = 2; // arrow color, into the owning Roi's handle_styles palette
+}
+
+// A vertex is described by three INDEPENDENT axes (spec.md §3), none implying the
+// others, and each is its own field. Interactivity:
+// it is a draggable handle IFF `handle` is present. Resting appearance: it draws a
+// glyph IFF `display_style > 0`. Surface membership: it is a point of the enclosing
+// surface (§8) IFF `enclosing`, or because it is an endpoint/corner of an
+// ENCLOSING/BOTH edge/facet. So a box corner is enclosing-relevant (via its edges),
+// glyph-less, AND a handle at once; a bare marker is a glyph with no handle, not
+// enclosing.
+message Vertex {
+  Vec3 position = 1;            // ZYX voxel-index
+  optional Vec3 direction = 2; // stored primary-axis frame vector; normalized on use
+  repeated double scalars = 3; // per-type-defined (StarDist radii, weights, ...); opaque to core
+  HandleSpec handle = 5;       // present IFF the vertex is a draggable handle
+  QuantizeLattice quantize = 7; // lattice this point snaps to IF the view rounds it
+  // Marker/glyph style for this vertex if drawn (spec.md §9.3): 0 = no glyph
+  // (the default), > 0 = a view-defined marker style class.
+  int32 display_style = 8;
+  // Surface membership: when true this vertex is a point of the enclosing surface
+  // (§8) even with no incident ENCLOSING/BOTH edge or facet — a bare declared
+  // surface point. The common case (box/tetra) leaves this false and lets the
+  // enclosing edges carry the corners. A vertex used only as an edge/patch
+  // `control` is off-surface and must leave this false. (spec.md §3/§8.)
+  bool enclosing = 9;
+  // Optional human name for the control point (a builder may set it, e.g. SurfQ6's
+  // "+Z tip"); shown by the generic per-vertex editor. "" ⇒ no name (use the index).
+  string label = 10;
+  // Index into the owning Roi's `handle_styles` palette (spec.md §9.3); 0 = the
+  // first/default style. Only meaningful when `handle` is present.
+  int32 style_index = 11;
+  // Present IFF this vertex's `direction` is drawn as a draggable arrow (spec.md §3).
+  // Independent of `handle` (the position handle): a vertex may have both, either, or
+  // neither. Absent leaves `direction` a stored-only frame vector.
+  DirectionHandle direction_handle = 12;
+
+  // 4 = the removed `Role` enum (interactivity/appearance/surface are now the
+  // three independent fields above). 6 = a reserved future `DerivedDirection`.
+  reserved 4, 6;
+  reserved "role";
+}
+
+// Display edge over display-vertex indices (spec.md §9.1). `control < 0` => a
+// straight segment; otherwise a rational quadratic Bezier with control vertex
+// `control` and scalar `weight` — the exact-conic form, so an ellipse arc is the
+// affine image of a circular one (a quarter arc is weight = sqrt(2)/2). `style`
+// names a view-owned visual class (WIRE=0, FACE=1, MARKER=2; < 0 => the
+// element-kind default, which is WIRE for an edge). `role` (ElementRole, default
+// BOTH) marks whether this edge belongs to the enclosing surface: an
+// ENCLOSING/BOTH edge contributes its `source` and `target` (never its `control`)
+// to the inclusion vertex set (§8); a DRAWN edge contributes nothing to inclusion.
+message Edge {
+  int32 source = 1;
+  int32 target = 2;
+  int32 control = 3;
+  double weight = 4;
+  int32 style = 5;
+  ElementRole role = 6;
+}
+
+// Display facet over display-vertex indices (spec.md §9.2). `vertices` is an
+// n-cycle (n >= 3); n > 3 fan-triangulates (v0,vi,vi+1), drawn one triangle at a
+// time. `style` names a visual class (FACE=1 is the facet default; < 0 => the
+// element-kind default = FACE). `flip` overrides the auto-detected outward
+// winding when the heuristic gets it wrong. `role` (ElementRole, default BOTH):
+// an ENCLOSING/BOTH facet is part of the enclosing surface (§8); DRAWN is an open
+// sheet you can see through but that does not enclose.
+message Facet {
+  repeated int32 vertices = 1;
+  ElementRole role = 2;
+  int32 style = 3;
+  bool flip = 4;
+}
+
+// A curved surface patch over display-vertex indices (spec.md §9.6): a rational
+// tensor-product Bezier surface of degree (nu-1, nv-1). `controls` is nu*nv display
+// vertices, row-major (index = v_row*nu + u_col); `weights` is nu*nv rational
+// weights (empty => all 1, i.e. polynomial). nu=nv=3 is the biquadratic case (the
+// surface analog of the conic Edge, quadric-exact); nu=nv=4 is bicubic — the SAME
+// message, only different data, so the degree is never hardcoded. Drawing and voxel
+// inclusion (§8) both tessellate the patch to triangles; the net is never assumed
+// flat, degree-2, or quadric, and a patch boundary is the net's own Bezier curve,
+// NOT tied to the (degree-2) Edge primitive. `role`/`style` as for Facet; `flip`
+// reverses the (u,v) outward orientation. A flat patch (coplanar net, unit weights)
+// is exactly a Facet — Patch strictly generalizes it.
+message Patch {
+  repeated int32 controls = 1; // nu*nv display-vertex indices, row-major
+  int32 nu = 2;                // control count along u (degree nu-1)
+  int32 nv = 3;                // control count along v (degree nv-1)
+  repeated double weights = 4; // nu*nv rational weights (empty => all 1)
+  ElementRole role = 5;
+  int32 style = 6;
+  bool flip = 7;
+}
+
+// A stored camera view (spec.md §14): an index pair into the owning Roi's
+// `vertices`. `viewpoint` is the camera position; `target` is what it looks at
+// (usually the root). Everything else is implicit in the two vertices — the look
+// direction is `target.position - viewpoint.position`, and the up vector is the
+// VIEWPOINT vertex's `direction` ((0,0,0)/unset = unoriented: keep the camera's
+// current up). A view whose two vertices coincide is degenerate: place the camera
+// at the point and keep the current look direction (only the up may reorient).
+// The points are ordinary vertices — no special behavior — so they move, bind, and
+// time-track exactly like any other (spec.md §5/§7); a view that tracks a moving
+// ROI is just a viewpoint vertex bound to the root.
+message CameraView {
+  int32 target = 1;    // vertex index looked at (usually the root)
+  int32 viewpoint = 2; // vertex index of the camera position; its `direction` is up
+}
+
+// Linear binding: when `target` moves by delta, `moved` moves by M * delta.
+// M is 9 floats, row-major 3x3, in ZYX. Anisotropic per axis (e.g. a box face:
+// corners 1x along the face normal, centroid 0.5x, opposite face 0x).
+message LinearBinding {
+  int32 moved = 1;
+  int32 target = 2;
+  repeated double m = 3;
+}
+
+// moved.direction = M * vertex0.direction. 9 floats, row-major 3x3.
+message DirectionSpec {
+  int32 moved = 1;
+  repeated double m = 2;
+}
+
+// Compile operator for LINEAR types: display_position[row] = sum_col coeff *
+// control_position[col]. Sparse scalar-coefficient triplets (each coefficient
+// multiplies a whole control 3-vector). Nonlinear types omit this and implement
+// RoiBehavior.Compile instead.
+message CompileTriplet {
+  int32 display_vertex = 1;
+  int32 control = 2;
+  double coeff = 3;
+}
+
+message CompileOperator {
+  repeated CompileTriplet triplets = 1;
+  int32 num_display = 2;
+  repeated int32 controls = 3; // control vertex indices, in column order
+}
+
+// Presence of a region outside its declared frame domain [t_start, t_end] (§7).
+// Time variation rides a whole-region pose carried on the `Roi` itself (the time
+// fields below), and shape change over time is expressed by STITCHING several Roi
+// segments into one `RoiSeq` (§7).
+enum OutOfSpan {
+  HOLD = 0; // clamp to the nearest in-domain frame (the region holds its end pose)
+  HIDE = 1; // region not present outside its domain
+}
+
+// How a region turns geometry into voxel membership (spec.md §8). The default
+// (unset message ⇒ mode ENCLOSED) suits the common "fills a closed volume" case
+// with no extra data, so most types say nothing.
+enum InclusionMode {
+  INCLUDE_ENCLOSED = 0; // inside the closed enclosing surface (winding number > 1/2)
+  INCLUDE_SHELL = 1;    // within `shell_thickness` of the surface (open surfaces; 2D)
+  INCLUDE_POINTS = 2;   // within `point_radius` of an enclosing vertex (POIs)
+  INCLUDE_NONE = 3;     // never included — a purely decorative annotation
+  // Every voxel whose half-open cell [k, k+1)^3 holds a point of the region's
+  // enclosing geometry: facets and patches as ENCLOSED triangulates them, edges
+  // (arcs tessellated), and `enclosing` vertices. No interior — a sheet, a curve
+  // or a point set, or a closed surface taken as its own shell (spec.md §8.3).
+  INCLUDE_INTERSECTED = 4;
+}
+
+// How the enclosing surface is derived when the region declares NO enclosing
+// facet or patch (spec.md §8.2) — so a plugin can hand over points and let the
+// host build the surface. Ignored when any ENCLOSING/BOTH facet or patch exists.
+enum AutoSurface {
+  // The convex hull of the enclosing vertex set (the pre-existing rule).
+  AUTO_SURFACE_HULL = 0;
+  // Star-shaped about the ROOT vertex: the enclosing vertices are joined as the
+  // Delaunay triangulation of their directions from the root, and placed at
+  // their own distances (spec.md §8.2). The root is the center, not a point of
+  // the surface.
+  AUTO_SURFACE_STAR = 1;
+}
+
+message Inclusion {
+  InclusionMode mode = 1;
+  // SHELL: half-width of the band around the surface, physical units (§"Coordinate
+  // spaces"). POINTS: radius around each enclosing vertex, physical units; 0 means
+  // just the single voxel containing the point. Ignored for ENCLOSED/NONE.
+  double shell_thickness = 2;
+  double point_radius = 3;
+}
+
+// Which space the placement frame's basis lives in (spec.md §15.3).
+enum FrameLock {
+  FRAME_PHYSICAL = 0; // basis is orthonormal in PHYSICAL space; freely orientable
+  FRAME_VOXEL = 1;    // basis forced to voxel-index identity; rotation refused outright
+}
+
+// What a region's placement frame is relative to (spec.md §16.3). Resolution walks
+// the parent tree; WORLD is the §15 single-level, dataset-parented special case.
+enum ParentKind {
+  PARENT_WORLD = 0;   // the level-0 dataset voxel-index frame (default; == §15)
+  PARENT_CROPPED = 1; // the active global-crop window frame
+  PARENT_REGION = 2;  // another region's frame, named by `region_id`
+}
+
+// A region's frame parent (spec.md §16.2). `region_id` is consulted only when
+// `kind == PARENT_REGION`; parent references must form a tree — acyclic (§16.4).
+message Parent {
+  ParentKind kind = 1;
+  string region_id = 2;
+}
+
+message Roi {
+  string type_name = 1;    // resolves to behavior in the registry
+  string type_version = 2; // semver of the type's contract; carried, not acted on by the host at 1.0; empty reads as "0.1.0"
+  repeated Vertex vertices = 3;
+  repeated Edge edges = 4;
+  repeated Facet facets = 5;
+  repeated LinearBinding bindings = 6;
+  repeated DirectionSpec direction_specs = 7;
+  CompileOperator compile = 8; // present for linear types
+  map<string, string> attrs = 11;
+  // Semantic grouping cue (spec.md §9.5): regions sharing a non-empty group are a
+  // hint for the same visual treatment (typically one color). Non-enforcing.
+  string style_group = 12;
+  // Voxelization semantics (§8). Unset ⇒ ENCLOSED. Independent of geometry: the
+  // same vertices/edges/facets can be filled, shelled, or treated as bare points.
+  Inclusion inclusion = 13;
+  // Curved surface patches (§9.6). Tessellate into the enclosing surface (§8.2)
+  // alongside facets; an ENCLOSING/BOTH patch contributes its tessellation.
+  repeated Patch patches = 14;
+  // Handle-appearance palette (spec.md §9.3); a `Vertex.style_index` selects an
+  // entry. Empty ⇒ the view falls back to its built-in handle defaults.
+  repeated HandleStyle handle_styles = 15;
+  // Stored camera views (spec.md §14): (target, viewpoint) index pairs into
+  // `vertices`. A region can carry named vantage points that ride along as it
+  // moves; empty for regions that store none.
+  repeated CameraView views = 16;
+
+  // The ROOT vertex (spec.md §5/§7): the point the pose pivots about and that
+  // bindings propagate from. Default 0 (the first vertex). Every type designates
+  // one — ellipsoid's is its center; box carries a center vertex for it. Making the
+  // pivot a real vertex is what lets control vertices move the root through the
+  // ordinary binding pass, keeping shape edits independent of position.
+  int32 root = 23;
+
+  // ----- Time (§7). All optional; every field empty ⇒ a static, single-frame
+  // region. An Roi is one TIME SEGMENT: a static canonical shape carried by a
+  // whole-region pose over a frame domain, pivoting about `root`. Stitch several
+  // into one `RoiSeq` for shape change over time. -----
+
+  // Frame domain this segment is defined over, inclusive. Both unset ⇒ timeless
+  // (present at every frame). `out_of_span` governs presence outside it.
+  optional int32 t_start = 17;
+  optional int32 t_end = 18;
+  OutOfSpan out_of_span = 19;
+
+  // Dense whole-region affine pose, DECOMPOSED so each part interpolates as
+  // itself (rotation slerps, never chords — a chorded rotation collapses the
+  // shape mid-interpolation). Applied about the ROOT, then the existing compile
+  // pass runs on the posed control points (§7.3). ONE ROW PER FRAME in the domain
+  // (dense by contract — motion is smooth or omitted, never sparse-keyframed; the
+  // creator fills every frame). An empty component ⇒ identity for that part.
+  // Lengths: pose_translation, pose_rotation = 3*span; pose_stretch = 6*span,
+  // where span = t_end - t_start + 1.
+  repeated double pose_translation = 20; // ZYX root offset, per frame
+  repeated double pose_rotation = 21;    // rotation vector (axis*angle), ZYX, per frame
+  repeated double pose_stretch = 22;     // symmetric 3x3 [zz,yy,xx,zy,zx,yx], per frame
+
+  // ----- Placement frame (§15). Positions the shape independently of it: the
+  // origin is the ROOT vertex (reused, above); `frame_basis` is an orthonormal 3x3
+  // rotation R about that origin. Canonical vertex storage stays voxel-index ZYX;
+  // the frame is applied as world = origin + S⁻¹·R·S·(v − origin) with S =
+  // diag(spacing) (§15.1), so it rotates in PHYSICAL space (shear-free) while
+  // leaving stored coordinates untouched. All optional; empty basis ⇒ identity ⇒
+  // exactly the pre-frame behavior. -----
+
+  // Row-major 3x3 rotation R (ZYX), 9 doubles; empty ⇒ identity. The region's own
+  // Z/Y/X axis directions in physical space.
+  repeated double frame_basis = 24;
+  // Which space the basis lives in (§15.3). PHYSICAL (default) = freely orientable;
+  // VOXEL = lattice-locked, a non-identity basis is an error.
+  FrameLock frame_lock = 25;
+  // Region-level mutability (§15.4), stored INVERTED so the proto3 zero-value
+  // (false) is the permissive default (mutable). `position_immutable` pins the
+  // origin; `orientation_immutable` pins the basis (no orientation handles).
+  bool position_immutable = 26;
+  bool orientation_immutable = 27;
+
+  // ----- Frame graph (§16). Generalizes the §15 placement frame: `parent` names
+  // WHAT this region's frame is relative to — world/dataset (default ⇒ §15), the
+  // cropped dataset, or another region — and resolution walks the tree parent-first.
+  // The non-root geometry names nothing external; the frame origin is the derived
+  // ROOT vertex (§16.5), so an edit that moves the center moves the anchor for free.
+  // -----
+
+  // This region's stable id, consulted only when it is another region's parent
+  // (`Parent.region_id`). Empty for a region nothing is parented to.
+  string region_id = 28;
+  // What this region's placement frame is relative to. Unset ⇒ world ⇒ §15.
+  Parent parent = 29;
+
+  // How the enclosing surface is derived when no ENCLOSING/BOTH facet or patch
+  // is declared (spec.md §8.2). Unset ⇒ HULL, the rule every earlier region had.
+  AutoSurface auto_surface = 30;
+
+  // 9, 10 = the removed per-vertex `tracks` / `residuals` (superseded by the
+  // whole-region pose above + segment stitching).
+  reserved 9, 10;
+  reserved "tracks", "residuals";
+}
+
+// One region of interest, possibly varying over time: a sequence of Roi segments
+// in FORWARD TIME ORDER, moved together (§7). The list itself is the binding —
+// segments need no shared id; co-membership is what makes them one region. A static
+// region is a RoiSeq with a single timeless segment.
+//
+// Where two ADJACENT segments' frame domains overlap, the region crossfades across
+// the overlap (§7.4). Invariant the crossfade relies on: overlaps are strictly
+// pairwise — every segment owns at least one frame outright (where it is wholly
+// itself), and no frame is covered by more than two segments — so a blend is never
+// three-way.
+message RoiSeq {
+  repeated Roi segments = 1;
+}
+
+message RoiSet {
+  string schema_version = 1; // semver of THIS file's contract
+  repeated RoiSeq seqs = 2; // was `repeated Roi rois` before the time model (§7)
+}
+
+// ---------------------------------------------------------------------------
+// Behavior — the "lambdas as gRPC calls"
+// ---------------------------------------------------------------------------
+
+// Axis-aligned ZYX voxel-index query box (inclusive lo, exclusive hi).
+message Box {
+  Vec3 lo = 1;
+  Vec3 hi = 2;
+}
+
+// One X-run on row (z,y): voxels [x_start, x_start+length). weight in [0,1];
+// weight == 1 for every run => boolean inclusion.
+message Run {
+  int32 z = 1;
+  int32 y = 2;
+  int32 x_start = 3;
+  int32 length = 4;
+  double weight = 5;
+}
+
+message Mask {
+  repeated Run runs = 1;
+}
+
+enum Resolution {
+  OK = 0;
+  CLAMPED = 1;
+  REJECTED = 2;
+}
+
+// Camera-free, data-space move request. The UI projects the 2D cursor onto the
+// axis/plane (camera-aware) and then calls this with the resulting 3D points;
+// this half carries no camera and is fully scriptable/remotable.
+message ConstrainMoveRequest {
+  Roi roi = 1;
+  int32 handle = 2; // vertex index of the grabbed handle
+  DofMode mode = 3;
+  Vec3 p0 = 4;      // original handle position
+  Vec3 axis = 5;    // primary axis
+  Vec3 p1 = 6;      // requested new position
+}
+
+message ConstrainMoveResponse {
+  Vec3 p_actual = 1;    // permitted position
+  Vec3 axis_out = 2;    // possibly-updated axis (lets arcs / nonlinear constraints work)
+  Resolution resolution = 3;
+}
+
+message RefurbishRequest {
+  Roi roi = 1;
+}
+
+message RefurbishResponse {
+  repeated Vertex vertices = 1;
+}
+
+message VoxelInclusionRequest {
+  Roi roi = 1;
+  Box query = 2;
+}
+
+message VoxelInclusionResponse {
+  Mask mask = 1;
+}
+
+message CompileRequest {
+  Roi roi = 1;
+}
+
+message CompileResponse {
+  repeated Vec3 display_positions = 1;
+}
+
+message ListTypesRequest {}
+
+message ListTypesResponse {
+  repeated string type_names = 1;
+}
+
+message DescribeTypeRequest {
+  string type_name = 1;
+}
+
+message DescribeTypeResponse {
+  string type_name = 1;
+  string type_version = 2;
+  bool has_constraint = 3;
+  bool has_refurbish = 4;
+  bool has_inclusion = 5;
+  bool has_compile = 6; // false => linear type, uses the CompileOperator data
+}
+
+service RoiBehavior {
+  rpc ConstrainMove(ConstrainMoveRequest) returns (ConstrainMoveResponse);
+  rpc Refurbish(RefurbishRequest) returns (RefurbishResponse);
+  rpc VoxelInclusion(VoxelInclusionRequest) returns (VoxelInclusionResponse);
+  rpc Compile(CompileRequest) returns (CompileResponse);
+  rpc ListTypes(ListTypesRequest) returns (ListTypesResponse);
+  rpc DescribeType(DescribeTypeRequest) returns (DescribeTypeResponse);
+}

@@ -1,0 +1,101 @@
+name: Go SDK
+
+on:
+  push:
+    paths: ['polyglot/go-sdk/**', 'docs/spec/manifest_schema.md', 'polyglot/manifest_fixtures/**', 'vizi_plugin_sdk/memory.py', 'vizi_plugin_sdk/_shared_atomic.py', 'scripts/memory_peer.py', 'proto/**', '.github/workflows/polyglot-go.yml']
+  pull_request:
+    paths: ['polyglot/go-sdk/**', 'docs/spec/manifest_schema.md', 'polyglot/manifest_fixtures/**', 'vizi_plugin_sdk/memory.py', 'vizi_plugin_sdk/_shared_atomic.py', 'scripts/memory_peer.py', 'proto/**', '.github/workflows/polyglot-go.yml']
+  workflow_dispatch:
+  # Nightly at 03:00 UTC: the macOS and Windows legs, which a push to master skips.
+  schedule:
+    - cron: '0 3 * * *'
+
+# A newer push or PR update on the same ref cancels the run it supersedes; the
+# nightly run has a group of its own so a push never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: polyglot/go-sdk/go.mod
+          cache-dependency-path: polyglot/go-sdk/go.sum
+      - uses: astral-sh/setup-uv@v6
+      - run: bash regenerate-proto.sh --check
+        working-directory: polyglot/go-sdk
+  # Everything, once, on Linux (the cheapest runner): formatting, vet for every
+  # platform's build (cross-compiled, so Windows and macOS code is type-checked
+  # here), the whole suite under the race detector, the fuzzers, and the
+  # cross-language atomics against Python.  The pure packages (manifest,
+  # geometry, payload, protocol, stage, violations) behave the same everywhere.
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: polyglot/go-sdk
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: polyglot/go-sdk/go.mod
+          cache-dependency-path: polyglot/go-sdk/go.sum
+      - run: test -z "$(gofmt -l doorbell memory violations control protocol geometry payload manifest plugin examples)"
+      - run: go vet ./...
+      - run: GOOS=windows go vet ./...
+      - run: GOOS=darwin GOARCH=arm64 go vet ./...
+      # Published manifest fixtures live outside the Go module, so Go
+      # does not include their contents in its test-result cache key.
+      - run: go test -race -count=1 ./...
+      # Duration-based fuzzing can fail as its own deadline expires (golang/go#75804).
+      # Use an execution count instead, about what a 10 s run covers.
+      # The separate test timeout still catches hangs; all failures remain fatal.
+      - run: go test ./doorbell -run '^$' -fuzz FuzzFrameDecode -fuzztime 400000x -timeout 2m
+      - run: go test ./doorbell -run '^$' -fuzz FuzzInputState -fuzztime 400000x -timeout 2m
+      - run: go test ./doorbell -run '^$' -fuzz FuzzStreamChunks -fuzztime 400000x -parallel 2 -timeout 2m
+      - run: go test ./doorbell -run '^$' -fuzz FuzzWindowsNames -fuzztime 400000x -parallel 2 -timeout 2m
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install atomicshm==0.1.0
+      - run: VIZI_MEMORY_PYTHON="$(command -v python)" go test -race ./memory -run Python -v -count=1 -timeout 90s
+
+  # macOS and Windows: only the packages whose code differs by platform -- the
+  # transport and doorbell (sockets, named pipes), the shared-memory mappings,
+  # the control plane over them, and install (paths, launchers).
+  platform:
+    # macOS and Windows run on pull requests, tag pushes and the nightly run;
+    # a push to master runs the Linux jobs only.
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: polyglot/go-sdk
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: polyglot/go-sdk/go.mod
+          cache-dependency-path: polyglot/go-sdk/go.sum
+      - run: go test -count=1 ./doorbell ./memory ./control ./plugin
+      - uses: actions/setup-python@v5
+        if: runner.os == 'macOS'
+        with:
+          python-version: '3.11'
+      - if: runner.os == 'macOS'
+        run: python -m pip install atomicshm==0.1.0
+      - if: runner.os == 'macOS'
+        run: VIZI_MEMORY_PYTHON="$(command -v python)" go test ./memory -run Python -v -count=1 -timeout 90s

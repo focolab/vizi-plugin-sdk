@@ -1,0 +1,94 @@
+# Publish the SDK to PyPI through trusted publishing (OIDC): no token exists
+# anywhere.
+#
+# Builds the package at the repository root and uploads exactly two files: the
+# wheel and the sdist of the version in `vizi_plugin_sdk/__init__.py`.  The
+# dispatch must name that version, so a run states what it uploads.  A version
+# on PyPI is permanent: it can be yanked, never replaced.
+#
+# Manual only, from master.  The PyPI side is a trusted publisher naming this
+# repository, this file's name and the `pypi` environment; all three must
+# match exactly or PyPI refuses the upload with "invalid-publisher".
+#
+# Runs on a self-hosted runner when the repository variable LINUX_RUNNER is
+# set (system python3 in a venv; Docker is needed for the publish action), and
+# on a hosted image when it is not.
+
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'The version to upload, exactly as in vizi_plugin_sdk/__init__.py (for example 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency: publish
+
+jobs:
+  build:
+    # Only focolab/vizi-plugin-sdk publishes; a copy of this file in any other
+    # repository (a fork) refuses.
+    if: github.repository == 'focolab/vizi-plugin-sdk' && github.ref == 'refs/heads/master'
+    runs-on: ${{ fromJSON(vars.LINUX_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: '3.11'
+      - name: The dispatch names the version in the source
+        env:
+          WANT: ${{ inputs.version }}
+        run: |
+          have="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' vizi_plugin_sdk/__init__.py)"
+          echo "source version: $have; dispatched: $WANT"
+          test -n "$have"
+          test "$have" = "$WANT"
+          echo "VERSION=$have" >> "$GITHUB_ENV"
+      - name: Build tool in a venv
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --upgrade pip build
+      - name: Build the wheel and the sdist
+        run: rm -rf dist && "$RUNNER_TEMP/venv/bin/python" -m build --outdir dist .
+      - name: Refuse anything but this version's wheel and sdist
+        run: |
+          ls -l dist
+          test "$(ls dist | wc -l)" = 2
+          test -f "dist/vizi_plugin_sdk-$VERSION-py3-none-any.whl"
+          test -f "dist/vizi_plugin_sdk-$VERSION.tar.gz"
+      - name: The sdist holds the package, README, LICENSE and NOTICE, and nothing else
+        run: |
+          tar -tzf "dist/vizi_plugin_sdk-$VERSION.tar.gz" | sed "s|^vizi_plugin_sdk-$VERSION/||" > sdist-files.txt
+          cat sdist-files.txt
+          ! grep -v -E '^(vizi_plugin_sdk/.*\.py|README\.md|LICENSE|NOTICE|pyproject\.toml|PKG-INFO|\.gitignore)$' sdist-files.txt
+          for f in README.md LICENSE NOTICE vizi_plugin_sdk/__init__.py; do grep -qx "$f" sdist-files.txt; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ${{ fromJSON(vars.LINUX_RUNNER || '"ubuntu-latest"') }}
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      # Self-hosted: the workspace persists between runs, and the publish action
+      # refuses a dist/ that still holds a previous attempt's .publish.attestation
+      # files. Start from an empty dist/.
+      - name: Empty dist/ left by a previous run
+        run: rm -rf dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

@@ -1,0 +1,6 @@
+#!/bin/sh
+# The plugin's launch line (vizi-plugin.json entry.command). It never builds (./assemble does)
+# and it execs, so the process vizi started is the JVM that serves, holding the doorbell.
+here=$(dirname "$0")
+if [ -f "$here/.java-home" ]; then JAVA="$(cat "$here/.java-home")/bin/java"; else JAVA=${JAVA:-java}; fi
+exec "$JAVA" --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -jar "$here/build/plugin.jar" "$@"
