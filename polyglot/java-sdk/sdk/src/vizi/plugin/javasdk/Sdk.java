@@ -9,7 +9,7 @@ public final class Sdk {
   /** The SDK's version string, reported in {@code DoorbellFault.sdk_version}. */
   public static final String VERSION = Identity.SDK_VERSION;
 
-  /** The SDK release ({@code 1.0.0}), which a plugin's manifest states as {@code sdk_version}. */
+  /** The SDK release ({@code 1.0.1}), which a plugin's manifest states as {@code sdk_version}. */
   public static final String RELEASE = Identity.SDK_RELEASE;
 
   /** The protocol this SDK speaks. */

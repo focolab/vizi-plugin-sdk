@@ -11,7 +11,7 @@ const sdkModulePath = "github.com/focolab/vizi-plugin-sdk/polyglot/go-sdk"
 
 // SDKVersion identifies this SDK's source release, aligned with the Python SDK.
 // Embedded module/VCS provenance separately identifies the actual build.
-const SDKVersion = "1.0.0"
+const SDKVersion = "1.0.1"
 
 // buildIdentity reads only metadata embedded in this executable, never the
 // current checkout, working directory or a mutable manifest beside the binary.

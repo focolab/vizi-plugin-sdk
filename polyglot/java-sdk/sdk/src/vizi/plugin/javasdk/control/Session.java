@@ -563,6 +563,7 @@ public final class Session {
     hostIdentity = id.substring(Identity.HELLO_PREFIX.length());
     hostProtocol = new ProtocolVersion(hello.getProtocolMajor(), hello.getProtocolMinor());
     sessionProtocol = new ProtocolVersion(Identity.PROTOCOL_MAJOR, readyMinor);
+    app.starting(this);
     PluginMsg ready = PluginMsg.newBuilder()
         .setId(readyId())
         .setReady(Ready.newBuilder()

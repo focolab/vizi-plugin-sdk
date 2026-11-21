@@ -30,9 +30,10 @@ parses the other's string; a malformed one (wrong prefix, empty, over 2048
 bytes, or carrying a control character) fails the session at the handshake
 with a diagnostic naming both.
 
-The Plugin Manager (Tools → Plugin Manager…) shows live status and retains the
-latest crash/failure status after process cleanup. Choose **Diagnostics…** to
-view or copy the launch stage, exit code/Unix signal, transport error, detail,
+The Plugin Manager (Tools → Plugin Manager…) shows live status (hover a
+plugin's name; a warning icon marks a refusal, a failure or a plugin not
+responding) and retains the latest crash/failure status after process cleanup.
+Choose **Diagnostics…** in the plugin's right-click menu to view or copy the launch stage, exit code/Unix signal, transport error, detail,
 and captured output. The record clears when the next launch attempt starts;
 an expected shutdown does not create a crash record.
 
@@ -73,7 +74,7 @@ all. The usual causes:
   the rule;
 - the directory is a broken symlink, or has no `vizi-plugin.json` at its top.
 
-After fixing the manifest, **Rescan** in the Plugin Manager; editing it does
+After fixing the manifest, **Refresh** in the Plugin Manager; editing it does
 not trigger a scan on its own.
 
 ## Common failures, by error string
@@ -114,7 +115,7 @@ much it was short.
 **`NoRegion: no segment with purpose 'O' subject '<id>' is installed`** (or
 `'P'`) — a push named an overlay or panel the host granted nothing for. In
 practice the id is not in the manifest's `overlays`/`panels`, or the
-manifest was edited without a Rescan. Undeclared ids are refused, not
+manifest was edited without a Refresh. Undeclared ids are refused, not
 borrowed from another contribution's arena.
 
 **`NoRegion: the panel image arena is full (<N> bytes free, <N> wanted)`**
@@ -140,7 +141,7 @@ if the process exited, open its retained Plugin Manager diagnostics.
 
 **`HostError` with kind `UNSUPPORTED` naming a missing permission** — add
 `"data_access"` (or `"contribute_rois"`) to the manifest permissions and
-Rescan.
+Refresh.
 
 **`HostError` with kind `UNSUPPORTED` when the active dataset is served by
 this plugin's own reader** — the self-read guard, not a timeout: the round
@@ -193,7 +194,7 @@ and the user's driver are mutually compatible.
   resolves the source before launch and rejects broken symlinks at discovery.
 - After editing plugin code, restart the plugin (Plugin Manager, or just
   close/reopen what was using it — the process stops with its last lease).
-  After editing the **manifest**, Rescan.
+  After editing the **manifest**, Refresh.
 - Run the repository's bootstrap and doctor before viewer testing; the
   [environment convention](environments.md) makes dependency and device
   failures distinguishable from transport/launch failures.

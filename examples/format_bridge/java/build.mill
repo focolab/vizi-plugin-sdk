@@ -6,7 +6,7 @@ import mill.*, javalib.*
 // The crate format bridge on the Java SDK, which ./assemble publishes to ~/.m2 first.
 object `package` extends JavaModule {
   def repositories = Task { super.repositories() ++ Seq("m2Local") }
-  def mvnDeps = Seq(mvn"org.focolab:vizi-sdk-java:1.0.0")
+  def mvnDeps = Seq(mvn"org.focolab:vizi-sdk-java:1.0.1")
   def mainClass = Some("formatbridge.FormatBridge")
   def javacOptions = Seq("--release", "25", "-Xlint:all")
 

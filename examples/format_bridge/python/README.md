@@ -113,15 +113,15 @@ the cause, and a `To fix:` section with the exact command. **The install is in p
 the manifest's `entry.command` names this interpreter and this script by absolute path,
 so after moving either, or rebuilding the venv, run `--install` again. `--manifest[=DIR]`
 writes the manifest without installing. If vizi is already running, **Tools → Plugin
-Manager… → Rescan**.
+Manager… → Refresh**.
 
 `vizi-plugin.json` here is the same manifest with a relative launch line
 (`.venv/bin/python format_bridge.py`), which the drivers use. The plugin warns at launch if
 the file and the code ever disagree. CPython `exec`s nothing and re-spawns nothing, so
 the inherited doorbell descriptor reaches the process that serves the plugin.
 
-**Provision the calibration asset**: Plugin Manager → *Crate Format Bridge*
-→ **Import…** → `examples/format_bridge/fixtures/vizi-crate-cal.bin`. Without
+**Provision the calibration asset**: in Plugin Manager, the **Import…** icon on
+*Crate Format Bridge*'s calibration asset row → `examples/format_bridge/fixtures/vizi-crate-cal.bin`. Without
 it `sample-calibrated.crate` refuses to open, on purpose, with a message
 naming Plugin Manager; every other fixture opens regardless.
 

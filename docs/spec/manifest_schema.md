@@ -492,8 +492,9 @@ its key (`control_plane_protocol.md` §8.4); an event from a cell carries
 them the host's queue sizing, which counts each template widget once per
 possible row. **A list realizes at most 4096 cells, `max_rows` × the row's
 widgets**: each row is built whole on the host's UI thread, and the
-per-panel widget cap counts a row's template only once; `visible_rows` (1 to 1024, default 8) is the height before the
-list scrolls. Column headings are an ordinary `row` of labels declared above
+per-panel widget cap counts a row's template only once; `visible_rows` (1 to 1024, default 8) is the least height:
+the reference host lets a list grow into the panel's spare height, a share of it beside an `image`, and the list
+scrolls past what fits. Column headings are an ordinary `row` of labels declared above
 it. With `selectable`, one row can be selected and the list's own `command`
 fires with `{"row": key}`.
 
@@ -532,8 +533,9 @@ declares its own `view_targets`, and only its FIRE interactions are causes.
 
 **The person allows it per plugin, in a control the host owns.** A plugin
 that declares `view_targets` or `follow_targets` anywhere gets one: in the
-reference host, "Control view" on its row in the Plugin Manager, off
-until the person turns it on and remembered after. It is not part of the
+reference host, the "Control the view" permission in the plugin's settings
+panel, opened from its row in the Plugin Manager: on from install until the
+person turns it off, and remembered. It is not part of the
 plugin's widget tree, has no id, cannot be patched, and nothing about it is
 sent to the plugin. It governs the plugin's panels' widgets and its tools
 alike, and **a panel must be open and showing while the view moves**, so a

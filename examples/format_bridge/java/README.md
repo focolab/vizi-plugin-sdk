@@ -1,7 +1,7 @@
 # Crate format bridge, in Java
 
 The crate format bridge of [`../SPEC.md`](../SPEC.md), built on the Java SDK
-(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.0`): one reader, one exporter, a manifest
+(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.1`): one reader, one exporter, a manifest
 asset and a runtime slot, four commands and a panel, plus the host-free comparator and writer.
 
 | File | What it is |
@@ -28,7 +28,7 @@ From this directory, with a JDK 25 or later on `PATH` (or in `JAVA_HOME`):
 dependency in one jar) with `polyglot/java-sdk/mill assembly`, and writes the JDK's home to
 `.java-home`. mill 1.1.3 is fetched by the committed `polyglot/java-sdk/mill` bootstrap. The
 dependencies are pinned by exact version in `build.mill` (mill has no lockfile): the SDK at
-`1.0.0` and JUnit Jupiter `5.13.4`.
+`1.0.1` and JUnit Jupiter `5.13.4`.
 
 Offline tests (the format against the committed fixtures, voxel size, the writer, the interop
 crates, the comparator's tiers and exit codes, and that `vizi-plugin.json` is the manifest the
@@ -90,7 +90,7 @@ jbang --java 25+ -R=--enable-native-access=ALL-UNNAMED -R=--sun-misc-unsafe-memo
   on Windows).
   - It writes `org.example.format_bridge/plugin-<hash>.jar` and `org.example.format_bridge/vizi-plugin.json`, and checks that the manifest reads
     back as vizi reads it.
-  - If vizi is already running, use **Tools → Plugin Manager… → Rescan**.
+  - If vizi is already running, use **Tools → Plugin Manager… → Refresh**.
 
 **What `--install` offers:**
 
@@ -134,7 +134,7 @@ jbang --java 25+ -R=--enable-native-access=ALL-UNNAMED -R=--sun-misc-unsafe-memo
 
 **Provisioning the calibration asset.** It is declared `manual`, so vizi keeps it, not the
 plugin directory. `sample-calibrated.crate` stores raw counts, and will not open until the table
-is provisioned: in vizi, **Plugin Manager → Crate Format Bridge → Import…**, then choose
+is provisioned: in vizi's Plugin Manager, the **Import…** icon on Crate Format Bridge's calibration asset row, then choose
 `examples/format_bridge/fixtures/vizi-crate-cal.bin` (32 bytes, SHA-256 `20845d7c…`). Without it
 the open is refused with a message naming Plugin Manager; that is the specified behavior, not a
 reader bug. **Use a different calibration…** on the panel picks a per-user override, which wins

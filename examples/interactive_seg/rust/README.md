@@ -25,7 +25,7 @@ writes that interface and copies the executable into the plugin directory as
 without Cargo or a repository script. Cleaning or moving the checkout does not
 break the installed copy. Old binary generations remain for running hosts;
 identical builds reuse the same copy. Rebuild and reinstall
-after changing declarations, then rescan plugins or restart Vizi. The plugin ID
+after changing declarations, then use Refresh in Plugin Manager or restart vizi. The plugin ID
 is `org.example.interactive_seg`; the other implementations of this example use
 the same ID, so install only one at a time.
 

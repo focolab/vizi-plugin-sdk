@@ -20,7 +20,7 @@ writes that interface and copies the executable into the plugin directory as
 without Cargo or a repository script. Cleaning or moving the checkout does not
 break the installed copy. Old binary generations remain for running hosts;
 identical builds reuse the same copy. Rebuild and reinstall
-after changing declarations, then rescan plugins or restart Vizi. The plugin ID
+after changing declarations, then use Refresh in Plugin Manager or restart vizi. The plugin ID
 is `org.example.format_bridge`; the other implementations of this example use
 the same ID, so install only one at a time.
 
@@ -97,7 +97,7 @@ reliably on the target platform. There is no CLI launch-command override.
 
 The calibration table is embedded in the binary and packaged as
 `vizi-crate-cal.bin` beside the generated manifest by both management commands.
-Through **Plugin Manager → Crate Format Bridge → Import…**, choose that installed
+With the **Import…** icon on Crate Format Bridge's calibration asset row in Plugin Manager, choose that installed
 file. The host verifies its declared 32-byte size and SHA-256 before use. A
 conflicting file is preserved and reported; move it aside and retry. Ordinary
 crates work without provisioning, but calibrated crates require it. A runtime

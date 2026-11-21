@@ -15,6 +15,9 @@ def protocClassifier: String = {
   val os = System.getProperty("os.name").toLowerCase
   val arch = System.getProperty("os.arch").toLowerCase match {
     case "amd64" | "x86_64" => "x86_64"
+    // Maven Central has no windows-aarch_64 protoc or grpc-java plugin; Windows on ARM runs the
+    // x86_64 ones under its built-in emulation, and they only generate source.
+    case "aarch64" | "arm64" if os.startsWith("windows") => "x86_64"
     case "aarch64" | "arm64" => "aarch_64"
     case other => sys.error(s"no protoc build for architecture $other")
   }
@@ -28,7 +31,7 @@ def protocClassifier: String = {
 
 object sdk extends JavaModule, PublishModule, ErrorProneModule {
   def artifactName = "vizi-sdk-java"
-  def publishVersion = "1.0.0"
+  def publishVersion = "1.0.1"
   def pomSettings = PomSettings(
     description = "Java SDK for vizi plugins (protocol 1.0)",
     organization = "org.focolab",
@@ -61,6 +64,15 @@ object sdk extends JavaModule, PublishModule, ErrorProneModule {
     "-XepExcludedPaths:.*/generatedSources\\.dest/.*"
   )
 
+  // The repository's LICENSE and NOTICE travel in the jar (and the sources jar) as META-INF/LICENSE and META-INF/NOTICE.
+  def legalFiles = Task.Sources(moduleDir / os.up / os.up / os.up / "LICENSE", moduleDir / os.up / os.up / os.up / "NOTICE")
+  def resources = Task {
+    val dir = Task.dest / "META-INF"
+    os.makeDir.all(dir)
+    legalFiles().foreach(f => os.copy.over(f.path, dir / f.path.last))
+    super.resources() ++ Seq(PathRef(Task.dest))
+  }
+
   // ---- wire code: protoc on ../../proto at build time, never committed ----
   def protoSrc = Task.Source(moduleDir / os.up / os.up / os.up / "proto")
 
@@ -90,6 +102,8 @@ object sdk extends JavaModule, PublishModule, ErrorProneModule {
 
   object test extends JavaTests, TestModule.Junit5 {
     def jupiterVersion = "5.13.4"
+    // A plugin's libraries can bring SLF4J; the tests run with it, so grpc's Netty is seen choosing.
+    def mvnDeps = super.mvnDeps() ++ Seq(mvn"org.slf4j:slf4j-simple:2.0.9")
     def forkArgs = Jvm.flags ++ Seq("-Xss4m")
     def javacOptions = Seq("--release", "25", "-encoding", "UTF-8")
     def forkEnv = super.forkEnv() ++ Map("VIZI_SDK_REPO" -> (moduleDir / os.up / os.up / os.up / os.up).toString)

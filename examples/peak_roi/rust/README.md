@@ -27,7 +27,7 @@ writes that interface and copies the executable into the plugin directory as
 without Cargo or a repository script. Cleaning or moving the checkout does not
 break the installed copy. Old binary generations remain for running hosts;
 identical builds reuse the same copy. Rebuild and reinstall
-after changing declarations, then rescan plugins or restart Vizi. The plugin ID
+after changing declarations, then use Refresh in Plugin Manager or restart vizi. The plugin ID
 is `org.example.peak_roi`; the other implementations of this example use
 the same ID.
 
@@ -102,7 +102,7 @@ records the chosen command; it does not copy or validate the runner. Use a runne
 it preserves the host's inherited connection handles and launches the plugin
 reliably on the target platform. There is no CLI launch-command override.
 
-Open **Tools → Show Peak ROI** after rescanning. All five widget commands remain hidden from the Tools menu.
+Open **Tools → Show Peak ROI** after a Refresh in Plugin Manager. All five widget commands remain hidden from the Tools menu.
 
 ### Development manifest
 

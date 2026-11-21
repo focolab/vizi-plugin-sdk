@@ -1,7 +1,7 @@
 # Tetra shape, in Java
 
 The tetra_shape plugin of [`../SPEC.md`](../SPEC.md), built on the Java SDK (`polyglot/java-sdk/`,
-`org.focolab:vizi-sdk-java:1.0.0`). One irregular tetrahedron is contributed four ways:
+`org.focolab:vizi-sdk-java:1.0.1`). One irregular tetrahedron is contributed four ways:
 
 - `free` and `scale` are declared regions the host enacts from their data alone;
 - `volume` is asked, and the plugin's shaper keeps its volume (SPEC §3);

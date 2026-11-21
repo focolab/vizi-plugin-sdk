@@ -35,7 +35,7 @@
     "contribute_rois"
   ],
   "min_vizi": "1.0.0",
-  "sdk_version": "1.0.0",
+  "sdk_version": "1.0.1",
   "subscriptions": [],
   "version": "0.1.0"
 }

@@ -1,7 +1,7 @@
 # Movie seg, in Java
 
 The movie-seg plugin of [`../SPEC.md`](../SPEC.md), built on the Java SDK
-(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.0`): two chunked overlays (`bands`, per t;
+(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.1`): two chunked overlays (`bands`, per t;
 `footprint`, static), five commands (`movie_seg.threshold`, `movie_seg.band_visible`,
 `movie_seg.band_1`–`band_3`) and the panel `movie_seg` (a threshold box and a checkbox per band).
 `src/MovieSeg.java` is the plugin (the two chunk sources, the tables, the commands, the panel);
@@ -65,7 +65,7 @@ jbang --java 25+ -R=--enable-native-access=ALL-UNNAMED -R=--sun-misc-unsafe-memo
   on Windows).
   - It writes `org.example.movie_seg/plugin-<hash>.jar` and `org.example.movie_seg/vizi-plugin.json`, and checks that the manifest reads
     back as vizi reads it.
-  - If vizi is already running, use **Tools → Plugin Manager… → Rescan**.
+  - If vizi is already running, use **Tools → Plugin Manager… → Refresh**.
 
 **What `--install` offers:**
 

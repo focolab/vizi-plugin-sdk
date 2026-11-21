@@ -1,7 +1,7 @@
 # Region quant, in Java
 
 The region-quant plugin of [`../SPEC.md`](../SPEC.md), built on the Java SDK
-(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.0`). It keeps one list row per region,
+(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.1`). It keeps one list row per region,
 each with its mean on one channel at the frame on screen and a `viridis` swatch. The rows are
 kept current from the `view` and `regions` pushes. A row click and "Brightest frame" move the view
 through set-view, and "Export CSV…" writes the table through the host's save dialog. A Follow,
@@ -87,7 +87,7 @@ jbang --java 25+ -R=--enable-native-access=ALL-UNNAMED -R=--sun-misc-unsafe-memo
   on Windows).
   - It writes `org.example.region_quant/plugin-<hash>.jar` and `org.example.region_quant/vizi-plugin.json`, and checks that the manifest reads
     back as vizi reads it.
-  - If vizi is already running, use **Tools → Plugin Manager… → Rescan**.
+  - If vizi is already running, use **Tools → Plugin Manager… → Refresh**.
 
 **What `--install` offers:**
 

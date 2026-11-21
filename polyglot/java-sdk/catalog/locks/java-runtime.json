@@ -1,0 +1,25 @@
+{
+  "runtime": "Eclipse Temurin JRE",
+  "version": "25.0.5+8",
+  "license": "GPL-2.0 with the Classpath Exception",
+  "platforms": {
+    "linux-x86_64": {
+      "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_x64_linux_hotspot_25.0.5_8.tar.gz",
+      "size": 61736206,
+      "sha256": "6fac98f0c8202efc3135a9e9e42aa61963ec42d1c5cbb40caf231e7b14a24ef6",
+      "archive": "tar.gz"
+    },
+    "macos-arm64": {
+      "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_aarch64_mac_hotspot_25.0.5_8.tar.gz",
+      "size": 56298727,
+      "sha256": "72ebd76b502c849e88dea39afae51baf5f82f2b5b1b6389c28ea707b20451bce",
+      "archive": "tar.gz"
+    },
+    "windows-x86_64": {
+      "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_x64_windows_hotspot_25.0.5_8.zip",
+      "size": 58589419,
+      "sha256": "da78d54a2fcdbba1e92d5e3f07dd30236f96297891c4a21a781c3f38f5c0beae",
+      "archive": "zip"
+    }
+  }
+}

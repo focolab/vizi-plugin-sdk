@@ -41,7 +41,7 @@ func TestToolWantsPick(t *testing.T) {
 	for _, bad := range []string{`"no"`, `0`, `[false]`} {
 		var typeError *json.UnmarshalTypeError
 		_, err := parse(1, `,"wants_pick":`+bad)
-		if !asTypeError(err, &typeError) || typeError.Field != "contributions.tools.wants_pick" {
+		if !asTypeError(err, &typeError) || !sameJSONField(typeError.Field, "contributions.tools.wants_pick") || typeError.Type.String() != "bool" {
 			t.Fatal(bad, err)
 		}
 	}

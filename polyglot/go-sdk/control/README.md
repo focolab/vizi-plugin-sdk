@@ -161,7 +161,7 @@ cfg := control.Config{PluginID: "org.example.inspect"}
 ```
 
 The SDK composes `Ready.id` from the plugin ID, compiled SDK source version
-(`1.0.0`), and **metadata embedded by the Go toolchain**:
+(`1.0.1`), and **metadata embedded by the Go toolchain**:
 main module/package, full VCS revision and modified flag when available,
 SDK module version/replacement, toolchain and build target. No timestamp,
 random token, runtime git lookup or adjacent manifest is used to identify
@@ -171,7 +171,7 @@ already-built executable, so it is not silently used as that executable's versio
 The revision is labeled `main-vcs`, with `modified=true`, `false`, or `unknown`.
 For true/unknown the identity explicitly says `not an exact source snapshot`.
 Missing VCS data (including `-buildvcs=false`) is `unavailable`; missing SDK
-module version data is `unknown`. The compiled source version remains `1.0.0`;
+module version data is `unknown`. The compiled source version remains `1.0.1`;
 it does not replace the actual Go module version or imply an unmodified build.
 A replacement's actual path/version is shown after
 `=>`; a local replacement or unversioned workspace dependency requires a source

@@ -22,6 +22,25 @@ the pinned stub generator has no 3.12+ wheels (see below). The SDK itself
 supports 3.11–3.13; change `.python-version` and re-run `uv sync` to check
 another minor.
 
+### Windows on ARM
+
+A contributor reported these from Windows 11 ARM64. They have not yet been verified
+independently.
+
+- `uv.lock` has no `win_arm64` wheel for `grpcio`, so `uv sync` builds it from source, which
+  needs the MSVC build tools and took about 45 minutes, serially. Two settings got the build
+  through:
+  - a short `UV_CACHE_DIR` (for example `C:\uvc`), because a source path deep in uv's cache
+    exceeds what the compiler accepts;
+  - `SETUPTOOLS_USE_DISTUTILS=stdlib`, without which `cl.exe` receives both `/std:c++17` and
+    `/std:c11`. It relies on Python 3.11's own `distutils`, which 3.12 removed.
+- `protobuf` has no `win_arm64` wheel either, so it runs its pure-Python backend: it works, more
+  slowly.
+- An x64 Python under Windows' emulation installs the prebuilt wheels instead:
+  `UV_PROJECT_ENVIRONMENT=.venv-x64`, `UV_PYTHON=cpython-3.11-windows-x86_64-none`, then
+  `uv sync --frozen`.
+- WSL needs none of this.
+
 `uv.lock` is committed. It locks only this dev baseline — a *shipping* plugin
 needs its own hashed, per-platform/profile locks per `docs/environments.md`,
 which `uv.lock` is not a substitute for.

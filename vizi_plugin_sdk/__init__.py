@@ -31,7 +31,7 @@ from __future__ import annotations
 #: change to this wheel".  The PROTOCOL is `1.0` and is not this
 #: number.  `tests/test_version.py` fails when a file here changes
 #: and this line does not.
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 _PROTO_EXPORTS = ("pb2", "pb2_grpc", "roi_pb2")
 _ASSET_EXPORTS = (

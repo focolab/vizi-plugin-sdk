@@ -63,7 +63,7 @@ verifies both and refuses the asset on a mismatch.
   parses the document to find out. One file covers both the precedence rule and
   the unit conversion.
 - **`vizi-crate-cal.bin`** — the manifest asset: offsets 7 and 13 for channels
-  0 and 1. Provision it through Plugin Manager → **Import…**
+  0 and 1. Provision it with the **Import…** icon on the plugin's calibration asset row in Plugin Manager
 
 ## Adding a fixture
 

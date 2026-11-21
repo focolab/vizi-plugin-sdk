@@ -1,6 +1,6 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //JAVA 25+
-//DEPS org.focolab:vizi-sdk-java:1.0.0
+//DEPS org.focolab:vizi-sdk-java:1.0.1
 //JAVA_OPTIONS --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
 
 import static vizi.plugin.javasdk.manifest.WidgetDecl.button;

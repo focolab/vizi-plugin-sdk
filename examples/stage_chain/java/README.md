@@ -1,7 +1,7 @@
 # Stage chain, in Java
 
 The four processing stages of [`../SPEC.md`](../SPEC.md), built on the Java SDK
-(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.0`): `gain`, `diff`, `widen` and `drift`,
+(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.1`): `gain`, `diff`, `widen` and `drift`,
 in `src/StageChain.java`.
 
 ## Build
@@ -61,7 +61,7 @@ jbang --java 25+ -R=--enable-native-access=ALL-UNNAMED -R=--sun-misc-unsafe-memo
   on Windows).
   - It writes `org.example.stage_chain/plugin-<hash>.jar` and `org.example.stage_chain/vizi-plugin.json`, and checks that the manifest reads
     back as vizi reads it.
-  - If vizi is already running, use **Tools → Plugin Manager… → Rescan**.
+  - If vizi is already running, use **Tools → Plugin Manager… → Refresh**.
 
 **What `--install` offers:**
 

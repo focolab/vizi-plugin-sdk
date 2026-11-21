@@ -684,8 +684,12 @@ public final class Plugin {
     }
 
     @Override
+    public void starting(Session s) {
+      session = s; // before Ready goes, so host().protocol() answers as soon as the host has it
+    }
+
+    @Override
     public void started(Session s) {
-      session = s;
       geometries.clear(); // a session hears every image's size when its panel is first shown to it
       appearance = null; // and the host's appearance once after its Ready
       for (ChunkedOverlay o : chunked.values()) o.start();

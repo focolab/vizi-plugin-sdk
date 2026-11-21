@@ -74,7 +74,7 @@ jbang --java 25+ -R=--enable-native-access=ALL-UNNAMED -R=--sun-misc-unsafe-memo
   on Windows).
   - It writes `org.example.interactive_seg/plugin-<hash>.jar` and `org.example.interactive_seg/vizi-plugin.json`, and checks that the manifest reads
     back as vizi reads it.
-  - If vizi is already running, use **Tools → Plugin Manager… → Rescan**.
+  - If vizi is already running, use **Tools → Plugin Manager… → Refresh**.
 
 **What `--install` offers:**
 

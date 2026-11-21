@@ -186,12 +186,12 @@ doctor should not emit them in the first place.
 
 After the bootstrap:
 
-1. Rescan in Plugin Manager.
-2. Expand the plugin's asset rows.
-3. Use **Download** for a declared credential-free HTTPS source, or
-   **Import…** for a manual one.
-4. Confirm each row says *verified*. A size or digest mismatch is rejected
-   without replacing a previously verified file.
+1. Refresh in Plugin Manager.
+2. Find the plugin's asset rows, under the plugin's own row.
+3. While an asset is missing, its row has a **Download** icon for a declared
+   credential-free HTTPS source and an **Import…** icon for a manual one.
+4. Hover each asset row to check its state. A size or digest mismatch is
+   rejected without replacing a previously verified file.
 5. Launch the plugin and run its in-host health command, if it has one.
 
 vizi publishes verified files atomically under a per-plugin root it owns.

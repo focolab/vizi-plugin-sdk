@@ -445,6 +445,35 @@ class Installing(_Declared):
         manifest.load_manifest(self.source)
 
 
+class Rerun(unittest.TestCase):
+    """The "run it again with --force" a refusal prints is a command that runs."""
+
+    def _main(self, **attrs):
+        main = types.ModuleType("__main__")
+        main.__spec__ = None
+        for k, v in attrs.items():
+            setattr(main, k, v)
+        return mock.patch.dict(sys.modules, {"__main__": main})
+
+    def test_a_dash_m_launch_is_given_back_as_dash_m(self):
+        """Started as `python -m some_plugin`, the hint named
+        `python …/some_plugin/__main__.py --install --force`, which fails on
+        the package's relative imports."""
+        spec = types.SimpleNamespace(name="some_plugin.__main__")
+        argv = ["/x/some_plugin/__main__.py", "--install"]
+        with self._main(__spec__=spec, __file__=argv[0]), mock.patch.object(sys, "argv", argv):
+            line = package._rerun("--force")[0]
+        self.assertIn(" -m some_plugin --install --force", line)
+        self.assertNotIn("__main__.py", line)
+
+    def test_a_script_launch_is_given_back_by_its_path(self):
+        argv = ["plugin.py", "--install"]
+        with self._main(__file__="plugin.py"), mock.patch.object(sys, "argv", argv):
+            line = package._rerun("--force")[0]
+        self.assertTrue(line.rstrip().endswith("plugin.py --install --force"), line)
+        self.assertNotIn(" -m ", line)
+
+
 class LaunchCommand(unittest.TestCase):
     """``entry.command`` is what the host will run, from the plugin's own
     directory, with none of this shell's state."""

@@ -8,12 +8,47 @@ hard to break. Protocol `1.0` hosts are vizi v1.0.0 and later.
 **The wire protocol and the Python SDK carry the 1.0 stability promise; this Java API may still
 change in a 1.x minor release.** The protocol it speaks is `1.0`, and a plugin built on it keeps working with later `1.x` hosts.
 
-- Artifact: `org.focolab:vizi-sdk-java:1.0.0`. Package root: `vizi.plugin.javasdk`.
+- Artifact: `org.focolab:vizi-sdk-java:1.0.1`. Package root: `vizi.plugin.javasdk`.
 - Build: mill 1.1.3 (`build.mill`); protoc and the grpc-java plugin are fetched and run at
   build time, so the wire code is never committed.
 - Every JVM running it needs `--enable-native-access=ALL-UNNAMED` and
   `--sun-misc-unsafe-memory-access=allow`. Test forks, the samples' launchers and `--install`
   all pass both.
+
+## Getting the SDK
+
+The SDK is not on Maven Central. Each version's GitHub release carries it as a thin jar, its
+sources jar and its pom; gRPC, Netty and protobuf stay dependencies in the pom, and Maven Central
+serves them. Install the three into your local Maven repository once per version:
+
+```sh
+gh release download v1.0.1 -R focolab/vizi-plugin-sdk --pattern 'vizi-sdk-java-1.0.1*'
+mvn install:install-file -Dfile=vizi-sdk-java-1.0.1.jar -DpomFile=vizi-sdk-java-1.0.1.pom -Dsources=vizi-sdk-java-1.0.1-sources.jar
+```
+
+Then depend on `org.focolab:vizi-sdk-java:1.0.1` and resolve from the local repository:
+
+- **mill:** `def repositories = Task { super.repositories() ++ Seq("m2Local") }`.
+- **Gradle:** `repositories { mavenCentral(); mavenLocal { content { includeGroup("org.focolab") } } }`:
+  the local repository last, and only for the SDK.
+- **jbang:** `//DEPS org.focolab:vizi-sdk-java:1.0.1` finds it there.
+
+A build without the local install can take the jar straight from the release URL
+(`https://github.com/focolab/vizi-plugin-sdk/releases/download/v1.0.1/vizi-sdk-java-1.0.1.jar`):
+- in Gradle, an `ivy` repository whose pattern is that URL, with `metadataSources { artifact() }`;
+- in mill, the downloaded jar as an unmanaged classpath entry.
+
+Either way the build must list the pom's dependencies itself. The local install keeps them and is
+simpler.
+
+To build the SDK from a checkout of this repository instead, run `mill sdk.publishM2Local` here,
+which writes the same coordinates to `~/.m2`.
+
+## Shipping through vizi's catalog
+
+[Packaging for the catalog](PACKAGING.md) covers a release that installs with one click: a
+bootstrap that fetches a pinned Java runtime, the launch line, the doctor, and a reproducible zip
+with unmerged dependency jars. `catalog/` holds the reference scripts.
 
 ## Build and test
 
@@ -21,7 +56,7 @@ change in a 1.x minor release.** The protocol it speaks is `1.0`, and a plugin b
 mill sdk.compile
 mill sdk.test                      # unit tests, the host emulator test, the bind probe
 VIZI_V2_CORPUS=corpus.json mill sdk.test.testOnly vizi.plugin.javasdk.doorbell.CrossCheckTest
-mill sdk.publishM2Local            # for jbang and the ports
+mill sdk.publishM2Local            # the SDK from this checkout into ~/.m2, for jbang and the examples
 ```
 
 `sdk.test` needs `VIZI_SDK_REPO` (the repository root), which `build.mill` sets for test forks.
@@ -31,7 +66,7 @@ mill sdk.publishM2Local            # for jbang and the ports
 ```java
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //JAVA 25+
-//DEPS org.focolab:vizi-sdk-java:1.0.0
+//DEPS org.focolab:vizi-sdk-java:1.0.1
 
 import java.util.List;
 import vizi.plugin.javasdk.*;

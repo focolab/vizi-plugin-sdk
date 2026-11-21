@@ -1,6 +1,6 @@
 [package]
 name = "vizi-doorbell"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 rust-version = "1.88"
 description = "Specification-based Rust SDK for Vizi protocol 1.x plugins"

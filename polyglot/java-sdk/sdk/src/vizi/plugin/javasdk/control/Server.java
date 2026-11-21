@@ -75,11 +75,18 @@ public final class Server implements AutoCloseable {
    * warning in the package still reaches stderr. A filter, unlike a level, is not
    * inherited, so it goes on the class loggers Netty logs through. Held here: java.util.logging
    * keeps loggers weakly, so a filter set on one nobody references is lost when it is collected.
+   *
+   * <p>The filter is java.util.logging's, so grpc's shaded Netty is told to log there. Left to
+   * choose, it logs through SLF4J whenever a plugin's classpath has it (a library that logs with
+   * SLF4J brings it), and the warning would reach stderr past the filter. The shaded Netty is
+   * grpc's own copy, so a plugin's own logging is unchanged.
    */
   private static final java.util.List<Logger> NETTY_BOOTSTRAP = java.util.stream.Stream.of("AbstractBootstrap", "ServerBootstrap", "Bootstrap")
       .map(c -> Logger.getLogger("io.grpc.netty.shaded.io.netty.bootstrap." + c)).toList();
 
   static {
+    io.grpc.netty.shaded.io.netty.util.internal.logging.InternalLoggerFactory.setDefaultFactory(
+        io.grpc.netty.shaded.io.netty.util.internal.logging.JdkLoggerFactory.INSTANCE);
     for (Logger l : NETTY_BOOTSTRAP) l.setFilter(Server::notKeepAliveNoise);
   }
 

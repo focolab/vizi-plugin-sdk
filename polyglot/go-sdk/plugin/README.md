@@ -197,7 +197,7 @@ this is not a transaction over the whole directory, and an interrupted update
 may leave new resources or an unused binary. A `.vizi-install-lock` left by a
 crash must be removed before retrying. Filesystem failures are returned, including
 Windows sharing restrictions. Installed sessions are not restarted; use the
-host's plugin lifecycle controls and Rescan to discover the new installation.
+host's plugin lifecycle controls and Refresh to discover the new installation.
 
 `RunCLI` is the recommended terminal entry point: it prints errors to
 `RunOptions.ErrorOutput` (stderr by default) and returns 0 or 1 for main to

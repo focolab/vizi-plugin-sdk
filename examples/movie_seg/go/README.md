@@ -97,7 +97,7 @@ points directly to a copied native executable under `bin`, with `.exe` on
 Windows. The SDK publishes the manifest last and gives each binary a
 content-addressed path, so updates do not overwrite a running Windows
 executable. Old binaries remain; stop their sessions before removing unused
-`bin` entries. Installation does not restart sessions. Rescan in vizi's Plugin
+`bin` entries. Installation does not restart sessions. Refresh vizi's Plugin
 Manager, and install only one implementation with this plugin ID at a time.
 
 The typed declaration registers the interface and handlers together. An offline
@@ -107,7 +107,7 @@ Unix drivers. Installation uses the generated native launch entry.
 
 ## In vizi
 
-After installation and a Plugin Manager rescan, choose **Tools → Show Movie seg**
+After installation and a Refresh in Plugin Manager, choose **Tools → Show Movie seg**
 to start the plugin and open its panel. With a dataset open, the overlays serve
 vizi's requested levels and timepoints automatically. Edit Threshold (initially
 400) or toggle Band 1–3 to change the state. Threshold text accepts surrounding

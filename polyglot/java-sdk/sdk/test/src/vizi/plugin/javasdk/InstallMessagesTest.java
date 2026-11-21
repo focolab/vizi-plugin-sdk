@@ -42,7 +42,9 @@ class InstallMessagesTest {
     try (var o = new PrintStream(out, true, StandardCharsets.UTF_8); var e = new PrintStream(err, true, StandardCharsets.UTF_8)) {
       exit = PluginMain.run(plugin(), args, env, o, e, InstallMessagesTest.class, running);
     }
-    Ran r = new Ran(exit, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    // println ends a line with the platform's separator; these tests are about the words.
+    Ran r = new Ran(exit, out.toString(StandardCharsets.UTF_8).replace("\r\n", "\n"),
+        err.toString(StandardCharsets.UTF_8).replace("\r\n", "\n"));
     assertFalse(r.all().contains("\tat ") || r.all().contains("Exception:") && !r.all().contains("unexpected"), "no stack trace: " + r);
     return r;
   }
@@ -288,9 +290,10 @@ class InstallMessagesTest {
   @Test
   void anIoFailureNamesTheOperationNotJustAPath() {
     Path p = Path.of("/opt/vizi/plugins/x");
-    assertEquals("permission denied creating the directory /opt/vizi/plugins/x",
+    // The message names the absolute path, which on Windows is on a drive (C:\opt\vizi\plugins\x).
+    assertEquals("permission denied creating the directory " + p.toAbsolutePath(),
         PluginMain.why(new java.nio.file.AccessDeniedException("/opt/vizi/plugins/x"), "creating the directory", p));
-    assertEquals("writing the manifest /opt/vizi/plugins/x failed: no space left on device",
+    assertEquals("writing the manifest " + p.toAbsolutePath() + " failed: no space left on device",
         PluginMain.why(new java.nio.file.FileSystemException("/tmp/.x123.tmp", null, "No space left on device"), "writing the manifest", p));
     assertEquals("IOException", PluginMain.cause(new java.io.IOException()), "never null");
   }

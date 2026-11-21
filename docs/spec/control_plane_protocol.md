@@ -3133,7 +3133,7 @@ its session is live; one that is not installed, is disabled, or has failed
 keeps them locked until that changes. **A start that fails is not retried by
 selecting or pressing again** — the handles say it could not start and why,
 and the next attempt follows something changing in the Plugin Manager (enabled,
-rescanned) or the plugin coming up another way.
+refreshed) or the plugin coming up another way.
 
 **The exchange.** One drag is one gesture, from pointer down to release.
 
@@ -4286,14 +4286,15 @@ to that plugin.**
    changes what it would change. If they moved `t` after the click, a request
    to set `t` from that click is refused `SUPERSEDED`. A request never undoes
    something the person did afterwards.
-3. **Declared in advance, off until the person allows it, and only while
-   the panel is up.** A manifest declares, per panel and per tool, what may be
-   moved (`view_targets`, `manifest_schema.md` §3.3). **The person allows it
+3. **Declared in advance, the person's to turn off, and only while the
+   panel is up.** A manifest declares, per panel and per tool, what may be
+   moved (`view_targets`, `manifest_schema.md` §3.3). **The person decides
    per plugin, in a control the host owns** — not part of the plugin's widget
-   tree, and **never communicated to the plugin**. Where that control is and
-   whether its state is remembered are the host's: the reference host has a
-   "Control view" checkbox on the plugin's row in the Plugin Manager,
-   off until the person turns it on, and remembers it. The choice governs the
+   tree, and **never communicated to the plugin**. Where that control is,
+   whether it starts on, and whether its state is remembered are the host's:
+   the reference host has a "Control the view" permission in the plugin's
+   settings panel (the Plugin Manager's gear), on from install until the
+   person turns it off, in effect at once, and remembered. The choice governs the
    plugin's panels' widgets and its tools, and it counts for a widget only
    while its panel is open and showing, and for a tool only while a panel of
    the plugin's that declares `view_targets` is (a panel that only offers a

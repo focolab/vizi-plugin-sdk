@@ -195,7 +195,7 @@ public record Manifest(
       return this;
     }
 
-    /** Sets {@code sdk_version}: the SDK release that built the plugin, such as {@code "1.0.0"}. */
+    /** Sets {@code sdk_version}: the SDK release that built the plugin, such as {@code "1.0.1"}. */
     public Builder sdkVersion(String release) {
       sdkVersion = Optional.of(Objects.requireNonNull(release, "release"));
       return this;

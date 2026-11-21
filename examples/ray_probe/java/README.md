@@ -1,7 +1,7 @@
 # Ray probe, in Java
 
 [`../SPEC.md`](../SPEC.md)'s ray probe, built on the Java SDK (`polyglot/java-sdk/`,
-`org.focolab:vizi-sdk-java:1.0.0`, package `vizi.plugin.javasdk`).
+`org.focolab:vizi-sdk-java:1.0.1`, package `vizi.plugin.javasdk`).
 
 | file | what it is |
 |---|---|
@@ -73,7 +73,7 @@ jbang --java 25+ -R=--enable-native-access=ALL-UNNAMED -R=--sun-misc-unsafe-memo
   on Windows).
   - It writes `org.example.ray_probe/plugin-<hash>.jar` and `org.example.ray_probe/vizi-plugin.json`, and checks that the manifest reads
     back as vizi reads it.
-  - If vizi is already running, use **Tools → Plugin Manager… → Rescan**.
+  - If vizi is already running, use **Tools → Plugin Manager… → Refresh**.
 
 **What `--install` offers:**
 

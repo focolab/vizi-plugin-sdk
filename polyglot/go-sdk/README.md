@@ -13,8 +13,8 @@ plugin that uses a newer feature checks the session first with
 [`plugin.Supports`](plugin/README.md#the-hosts-protocol-version).
 
 The Go SDK's version is the SDK release's, `control.SDKVersion` (currently
-`1.0.0`). The module lives in a subdirectory, so its tag for SDK release
-`1.0.0` is `polyglot/go-sdk/v1.0.0`, and likewise for each later release.
+`1.0.1`). The module lives in a subdirectory, so its tag for SDK release
+`1.0.1` is `polyglot/go-sdk/v1.0.1`, and likewise for each later release.
 
 It requires Go 1.25 or newer and runs on Linux (`SOCK_SEQPACKET`), macOS
 (`SOCK_DGRAM` with `SCM_RIGHTS`) and Windows (loopback TCP with named

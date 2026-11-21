@@ -19,11 +19,11 @@ public final class Identity {
    * would be {@code 1.1.0-alpha.1}. It is the published artifact's version too: {@code
    * publishVersion} in {@code build.mill} must match it.
    */
-  public static final String SDK_VERSION = "1.0.0";
+  public static final String SDK_VERSION = "1.0.1";
 
   /**
    * The SDK release, in the form every SDK writes to a manifest's {@code sdk_version} and the
-   * Python SDK's {@code __version__} uses: {@code 1.0.0} for {@link #SDK_VERSION} {@code 1.0.0}.
+   * Python SDK's {@code __version__} uses: {@code 1.0.1} for {@link #SDK_VERSION} {@code 1.0.1}.
    */
   public static final String SDK_RELEASE = releaseForm(SDK_VERSION);
 

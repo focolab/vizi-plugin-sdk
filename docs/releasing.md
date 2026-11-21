@@ -85,8 +85,18 @@ catalog entry, from `linux-x86_64`, `macos-arm64` and `windows-x86_64`.
 
 ## 4. Dependencies
 
-Dependencies come from PyPI, or from the release's own assets by URL and
-hash. Nothing comes from a private repository.
+Every dependency comes from one of three places:
+
+- **PyPI**, locked by version and hash.
+- **The release's own assets**, by URL and hash.
+- **A public https URL pinned in the repository** by size and SHA-256, in a
+  committed lock. A Java plugin's runtime is pinned this way: see the Java
+  SDK's [packaging guide](../polyglot/java-sdk/PACKAGING.md) and its
+  `catalog/locks/java-runtime.json`.
+
+The bootstrap checks every download against its pin before it uses it, and
+refuses one that does not match. Nothing comes from a private repository, and
+nothing comes from an address the repository does not pin.
 
 ## 5. Acceptance pins the archive
 

@@ -88,7 +88,7 @@ Use `--install=installed-plugins` to choose another plugin root; relative paths
 are relative to the current directory. Quote the whole argument for spaces.
 Repeat installs into an SDK-managed directory need no flag; `--force` permits
 adopting an existing nonempty directory that the installer does not manage.
-Installation does not restart running sessions. Rescan in vizi's Plugin
+Installation does not restart running sessions. Refresh vizi's Plugin
 Manager. Install only one implementation with this ID.
 
 A durable native build also supports installation and manifest-only output.

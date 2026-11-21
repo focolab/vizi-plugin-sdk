@@ -501,10 +501,20 @@ def _indented(lines: "list[str]") -> str:
 
 
 def _rerun(*extra: str) -> "list[str]":
-    """This run's own command line with ``extra`` added, as a fix gives it."""
+    """This run's own command line with ``extra`` added, as a fix gives it.
+
+    Started as ``python -m <module>``, the run is given back in that form, as
+    :func:`launch_command` derives it: ``sys.argv[0]`` is then the module's
+    ``__main__.py``, and running that file by its path fails on the package's
+    relative imports."""
     argv = [a for a in sys.argv[1:] if a not in extra]
+    python = sys.executable or "python"
+    spec = getattr(sys.modules.get("__main__"), "__spec__", None)
+    frozen = getattr(sys, "frozen", False)
+    if not frozen and spec is not None and spec.name and spec.name != "__main__":
+        return _command([python, "-m", spec.name.removesuffix(".__main__"), *argv, *extra])
     script = sys.argv[0] if sys.argv and sys.argv[0] else "path/to/plugin.py"
-    return _command([sys.executable or "python", script, *argv, *extra])
+    return _command([python, script, *argv, *extra])
 
 
 def _mode(argv: "list[str]") -> "str | None":

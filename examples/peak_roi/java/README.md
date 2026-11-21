@@ -1,7 +1,7 @@
 # Peak ROI, in Java
 
 The peak-finder ROI plugin of [`../SPEC.md`](../SPEC.md), built on the Java SDK
-(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.0`): `src/PeakRoi.java` (the plugin: the
+(`polyglot/java-sdk/`, `org.focolab:vizi-sdk-java:1.0.1`): `src/PeakRoi.java` (the plugin: the
 panel, its typed widget handles, `peak.run` and the job) and `src/Analysis.java` (SPEC §3–§4:
 the blur and the peak, no library).
 
@@ -18,7 +18,7 @@ From this directory, with a JDK 25 or later on `PATH` (or in `JAVA_HOME`):
 dependency in one jar) with `polyglot/java-sdk/mill assembly`, and writes the JDK's home to
 `.java-home`. mill 1.1.3 is fetched by the committed `polyglot/java-sdk/mill` bootstrap.
 Dependencies are pinned by exact version in `build.mill` (mill has no lockfile): the SDK at
-`1.0.0`, JUnit Jupiter `5.13.4` for the tests; the SDK pins its own.
+`1.0.1`, JUnit Jupiter `5.13.4` for the tests; the SDK pins its own.
 
 Offline tests (the kernel, clamped edges, the non-finite rule, the tie-break, a synthetic blob,
 every dtype, the ellipsoid's controls and its 18 compiled positions against hand-written
@@ -80,7 +80,7 @@ jbang --java 25+ -R=--enable-native-access=ALL-UNNAMED -R=--sun-misc-unsafe-memo
   on Windows).
   - It writes `org.example.peak_roi/plugin-<hash>.jar` and `org.example.peak_roi/vizi-plugin.json`, and checks that the manifest reads
     back as vizi reads it.
-  - If vizi is already running, use **Tools → Plugin Manager… → Rescan**.
+  - If vizi is already running, use **Tools → Plugin Manager… → Refresh**.
 
 **What `--install` offers:**
 

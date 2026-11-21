@@ -169,7 +169,8 @@ write anywhere (`spec/control_plane_protocol.md` §2.3):
   `settings_dir()` creates it on first use, so a plugin that keeps no
   settings leaves no empty folder in its source tree. It lives as long as
   the plugin is installed, and deleting the plugin's folder removes it with
-  everything else. Plugin Manager's *Settings folder* button opens it. When
+  everything else. **Open settings folder**, in the plugin's right-click menu in
+  Plugin Manager, opens it. When
   the plugin's folder is not writable, the host uses a fallback folder under
   its own data directory instead — that one it does create, with a
   `plugin-id.txt` naming the plugin so a leftover can be traced — and
@@ -212,7 +213,7 @@ strings are accepted with a warning and grant nothing.
 
 ## Lifecycle
 
-- **Scan** — at startup and on Plugin-Manager Rescan, the host reads
+- **Scan** — at startup and on Plugin Manager's Refresh, the host reads
   manifests as data. Nothing launches. Invalid/incompatible manifests are
   skipped with a log line.
 - **Lazy launch** — the process starts on first use (a matching file is
@@ -230,11 +231,12 @@ strings are accepted with a warning and grant nothing.
   do that work on first use, not at import, or declare `entry.startup_s`. A launch that
   dies here shows as `stage: startup` in the diagnostics
   ([debugging](debugging.md)).
-- **Health** — the Plugin Manager shows per-plugin status: *stopped*,
-  *running*, *not responding*, or a retained crash/failure summary. A hung
-  plugin is detached after a timeout rather than freezing the viewer. The
-  Manager offers restart and retained diagnostics; disabling a running plugin
-  stops it immediately.
+- **Health** — the Plugin Manager shows each plugin's status when you hover its
+  name (*stopped*, *running*, *not responding*, …), and a warning icon beside
+  the name while it is refused, failed or not responding, with the reason on
+  hover. A hung plugin is detached after a timeout rather than freezing the
+  viewer. The last failure is kept (**Diagnostics…** in the plugin's
+  right-click menu); unticking a running plugin's checkbox stops it at once.
 - **Shutdown** — on every voluntary teardown the host sends `Shutdown` with
   a `reason` and a deadline, then waits for the plugin to close the stream.
   An `@on_shutdown` hook runs inside that window (`ShutdownNotice.reason`,

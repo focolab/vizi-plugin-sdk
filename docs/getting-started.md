@@ -120,8 +120,9 @@ touch ~/demo.ramp        # the demo reader never reads the bytes
 ```
 
 1. Start vizi. (If it was already running: **Tools → Plugin Manager… →
-   Rescan**.)
-2. **Tools → Plugin Manager…** — "Ramp Reader" is listed, status *stopped*.
+   Refresh**.)
+2. **Tools → Plugin Manager…** — "Ramp Reader" is listed; hovering its name
+   shows status *stopped*.
    Plugins launch lazily; nothing runs until first use.
 3. **File → Open** — the file-type filter now includes `*.ramp`. Pick
    `~/demo.ramp`.

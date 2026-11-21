@@ -264,6 +264,14 @@ public interface Application {
 
   // ---- the session ----
 
+  /**
+   * The handshake is accepted and {@code Ready} is about to be sent: the session's host identity
+   * and protocol versions are set. Publish the session here, so whatever reads them through it
+   * sees them from the moment the host has {@code Ready}. Anything sent through the session now
+   * waits behind {@code Ready}. Dispatch thread; must not block.
+   */
+  default void starting(Session session) {}
+
   /** The session is up: {@code Ready} has been sent. Dispatch thread; must not block. */
   default void started(Session session) {}
 

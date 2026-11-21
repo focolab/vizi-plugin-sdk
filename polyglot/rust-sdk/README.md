@@ -5,7 +5,7 @@ specifications and protobuf IDL. The Cargo package name is **`vizi-doorbell`**.
 
 **The wire protocol and the Python SDK carry the 1.0 stability promise; this
 Rust API may still change in a 1.x minor release.** The protocol it speaks is 1.0. The crate's version
-is the SDK release's: SDK release `1.0.0` is crate version `1.0.0`. See [Forward compatibility](#forward-compatibility) for what
+is the SDK release's: SDK release `1.0.1` is crate version `1.0.1`. See [Forward compatibility](#forward-compatibility) for what
 a plugin built against protocol 1.0 does on a later 1.x host.
 
 ## What it provides
@@ -246,7 +246,7 @@ that relative launch path. Identical builds reuse the same verified copy;
 changed builds get a new name so Windows can keep an old process running.
 Old copies remain available until you remove them when no host uses them.
 Cleaning or moving the checkout does not break an installed copy. Rebuild and
-reinstall after code/interface changes, then rescan plugins or restart Vizi.
+reinstall after code/interface changes, then use Refresh in Plugin Manager or restart vizi.
 Runtime libraries are not bundled; they must remain available to the installed binary.
 
 Use `--install --copy=false` (or `InstallOptions::copy_executable = false`) for

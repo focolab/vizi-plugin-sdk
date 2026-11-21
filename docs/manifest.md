@@ -7,7 +7,7 @@
 
 Every plugin directory ships a `vizi-plugin.json` at its root. The host
 scans `~/.vizi/plugins/` (or `$VIZI_PLUGINS_DIR`) at startup and on
-Plugin-Manager **Rescan**, reading manifests **as data — no plugin code runs
+Plugin Manager's **Refresh**, reading manifests **as data — no plugin code runs
 at scan time**. An invalid or incompatible manifest is logged and skipped;
 it never breaks discovery of other plugins.
 
@@ -21,7 +21,7 @@ it never breaks discovery of other plugins.
 | `version` | string | yes | Your plugin's own version. Informational — and the natural content of the handshake's identity string, `Ready; I am <id> <version>; …`, which the host writes to your plugin's log so a session names the build that spoke (`serve(version=...)` overrides it). |
 | `engines.vizi` | string | yes | Minimum host **protocol** version, `"major.minor"` — `"1.0"` for this SDK. |
 | `min_vizi` | string | no | The oldest vizi application release the plugin runs in, a PEP 440 version (`"1.0.0"`). The SDKs accept the normalized public form: release numbers, then optionally `aN`/`bN`/`rcN`, `.postN`, `.devN`. Set it in the builder when a plugin needs a host fix that came after its protocol minor; left unset, each SDK's `--manifest` and `--install` write `"1.0.0"`, the first protocol-`1.0` release. |
-| `sdk_version` | string | no | The SDK release that built the plugin (`"1.0.0"`). Each SDK's `--manifest` and `--install` write it; you do not set it. |
+| `sdk_version` | string | no | The SDK release that built the plugin (`"1.0.1"`). Each SDK's `--manifest` and `--install` write it; you do not set it. |
 | `entry.command` | list of strings | yes | The launch command. |
 | `entry.startup_s` | number | no | How long the plugin expects to take to start, in seconds (advisory; see below). |
 | `contributions` | object | no | What the plugin adds — see below. |
@@ -64,8 +64,9 @@ behavior is a defect in the specification, not a license.
 
 **A plugin asking for a protocol the host does not speak never runs** (another
 major, or a newer minor): the host rejects its manifest when it scans the
-plugins directory, like an invalid one, and Plugin Manager lists it as *not
-loadable* (`spec/manifest_schema.md` §2.1). `engines.vizi` is checked before
+plugins directory, like an invalid one, and Plugin Manager lists it with a
+warning icon whose hover gives the reason, and **Why?** in its right-click menu
+(`spec/manifest_schema.md` §2.1). `engines.vizi` is checked before
 anything else in the manifest, so a manifest written for a newer host is
 refused for its version, not for a field this host does not know. The reason
 reads `<name> <version> needs vizi protocol <engines>; this vizi speaks 1.0`,

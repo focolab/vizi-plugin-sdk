@@ -176,6 +176,40 @@ class ControlTest {
   }
 
   @Test
+  void theSessionIsPublishedBeforeReadyIsSent() throws Exception {
+    // started() is held open, so Ready reaches the host while the dispatch thread is still in it:
+    // whatever the application needs from the session must have come through starting().
+    var published = new java.util.concurrent.CompletableFuture<Session>();
+    var release = new java.util.concurrent.CountDownLatch(1);
+    app = new App() {
+      @Override
+      public void starting(Session session) {
+        published.complete(session);
+      }
+
+      @Override
+      public void started(Session session) {
+        try {
+          release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    };
+    up();
+    try {
+      PluginMsg ready = host.hello();
+      Session session = published.getNow(null);
+      assertNotNull(session, "starting() ran before Ready was sent");
+      assertTrue(session.hostProtocol().isPresent(), "the host's protocol is set before Ready");
+      assertEquals(new ProtocolVersion(1, ready.getReady().getProtocolMinor()), session.sessionProtocol().orElseThrow());
+      assertEquals("vizi-java-testkit 1.0", session.hostIdentity());
+    } finally {
+      release.countDown();
+    }
+  }
+
+  @Test
   void aWrongMajorFailsTheSession() throws Exception {
     up();
     host.send(HostMsg.newBuilder().setId("Hello from future 2.0").setHello(Hello.newBuilder().setProtocolMajor(2)).build());

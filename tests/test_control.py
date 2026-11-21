@@ -1358,7 +1358,7 @@ class Arrangements(unittest.TestCase):
         self.assertEqual(len(delivered), 2, "the waiter was woken")
         self.assertEqual(delivered[1].WhichOneof("msg"), "host_error")
         self.assertEqual(delivered[1].host_error.kind, pb2.Error.PROTOCOL)
-        self.assertEqual(delivered[1].rois.rois, [], "and not with the list it refused")
+        self.assertEqual(list(delivered[1].rois.rois), [], "and not with the list it refused")
         self.assertEqual(plane.refused_bounds, 1)
 
     def test_an_over_long_request_is_answered_rather_than_left_to_time_out(self):

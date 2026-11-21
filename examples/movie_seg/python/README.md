@@ -77,7 +77,7 @@ the cause, and a `To fix:` section with the exact command. **The install is in p
 the manifest's `entry.command` names this interpreter and this script by absolute path,
 so after moving either, or rebuilding the venv, run `--install` again. `--manifest[=DIR]`
 writes the manifest without installing. If vizi is already running, **Tools → Plugin
-Manager… → Rescan**.
+Manager… → Refresh**.
 
 `vizi-plugin.json` here is the same manifest with a relative launch line
 (`.venv/bin/python movie_seg.py`), which the drivers use. The plugin warns at launch if

@@ -26,7 +26,7 @@ func TestBuildIdentityQualifiesRevision(t *testing.T) {
 		if modified == "" || modified == "unexpected" {
 			wantModified = "unknown"
 		}
-		for _, want := range []string{"Ready; I am example.plugin;", "main-vcs=", "1598cf91abcdef01234567890123456789012345678", "modified=" + wantModified, "example.org/tool", "vizi-go-sdk 1.0.0; sdk-module=", "v1.2.3", "go1.25.0", "linux", "amd64"} {
+		for _, want := range []string{"Ready; I am example.plugin;", "main-vcs=", "1598cf91abcdef01234567890123456789012345678", "modified=" + wantModified, "example.org/tool", "vizi-go-sdk 1.0.1; sdk-module=", "v1.2.3", "go1.25.0", "linux", "amd64"} {
 			if !strings.Contains(got, want) {
 				t.Fatalf("missing provenance %q: %s", want, got)
 			}
@@ -44,7 +44,7 @@ func TestBuildIdentityQualifiesRevision(t *testing.T) {
 func TestBuildIdentityMissingMetadataDoesNotGuess(t *testing.T) {
 	for _, info := range []*debug.BuildInfo{nil, {Main: debug.Module{Path: "example.org/tool", Version: "v2.0.0"}}} {
 		got, err := composeBuildIdentity("plugin", "", info)
-		if err != nil || !strings.Contains(got, "unavailable") || !strings.Contains(got, "vizi-go-sdk 1.0.0; sdk-module=version unknown") || strings.Contains(got, "modified=false") {
+		if err != nil || !strings.Contains(got, "unavailable") || !strings.Contains(got, "vizi-go-sdk 1.0.1; sdk-module=version unknown") || strings.Contains(got, "modified=false") {
 			t.Fatal("invented build provenance", got, err)
 		}
 	}

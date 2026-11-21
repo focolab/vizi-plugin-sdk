@@ -75,16 +75,17 @@ jobs:
       # Linux runs everything.  macOS and Windows run the classes whose code
       # differs by platform: the doorbell, the mappings and native I/O
       # (Winsock and kernel32 on Windows), the bind probe, the real-transport
-      # emulator tests, and the root API (install, launchers, paths).  The
-      # whole SDK compiles on each either way, every native path included.
+      # emulator tests, the root API and the installer's messages (install,
+      # launchers, paths, line endings).  The whole SDK compiles on each either
+      # way, every native path included.
       # Unix-only tests skip by assumption on Windows.
       - if: runner.os == 'Linux'
         run: ./mill --no-daemon sdk.test
       - if: runner.os == 'macOS'
-        run: ./mill --no-daemon sdk.test.testOnly 'vizi.plugin.javasdk.doorbell.*' 'vizi.plugin.javasdk.memory.*' 'vizi.plugin.javasdk.nativeio.*' vizi.plugin.javasdk.control.BindProbeTest vizi.plugin.javasdk.HostEmulatorTest vizi.plugin.javasdk.RootApiTest
+        run: ./mill --no-daemon sdk.test.testOnly 'vizi.plugin.javasdk.doorbell.*' 'vizi.plugin.javasdk.memory.*' 'vizi.plugin.javasdk.nativeio.*' vizi.plugin.javasdk.control.BindProbeTest vizi.plugin.javasdk.HostEmulatorTest vizi.plugin.javasdk.RootApiTest vizi.plugin.javasdk.InstallMessagesTest
       - if: runner.os == 'Windows'
         shell: pwsh
-        run: ./mill.bat --no-daemon sdk.test.testOnly 'vizi.plugin.javasdk.doorbell.*' 'vizi.plugin.javasdk.memory.*' 'vizi.plugin.javasdk.nativeio.*' vizi.plugin.javasdk.control.BindProbeTest vizi.plugin.javasdk.HostEmulatorTest vizi.plugin.javasdk.RootApiTest
+        run: ./mill.bat --no-daemon sdk.test.testOnly 'vizi.plugin.javasdk.doorbell.*' 'vizi.plugin.javasdk.memory.*' 'vizi.plugin.javasdk.nativeio.*' vizi.plugin.javasdk.control.BindProbeTest vizi.plugin.javasdk.HostEmulatorTest vizi.plugin.javasdk.RootApiTest vizi.plugin.javasdk.InstallMessagesTest
 
   # The jbang sample against its driver over real processes. (The examples'
   # Java implementations run in their own workflows, such as stage-chain.yml.)

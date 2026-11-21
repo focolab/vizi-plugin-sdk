@@ -171,7 +171,7 @@ func TestPublishedSchemaFixtures(t *testing.T) {
 					`rejected "button must be a string"`:                           {"contributions.tools.triggers.button", "string"},
 				}
 				expected, ok := expectedTypes[label]
-				if !ok || typeError.Field != expected.field || typeError.Type.String() != expected.typ {
+				if !ok || !sameJSONField(typeError.Field, expected.field) || typeError.Type.String() != expected.typ {
 					t.Fatalf("wrong typed rejection for %s: %v", label, decodeErr)
 				}
 				typeRejected++

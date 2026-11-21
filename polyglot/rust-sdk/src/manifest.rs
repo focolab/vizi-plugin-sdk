@@ -216,7 +216,7 @@ pub fn valid_min_vizi(v: &str) -> bool {
 }
 
 /// The SDK release that built the plugin, in the release form every SDK
-/// writes to `sdk_version` (`1.0.0` for the crate's `1.0.0`; a pre-release
+/// writes to `sdk_version` (`1.0.1` for the crate's `1.0.1`; a pre-release
 /// crate version such as `1.1.0-alpha.1` is written `1.1a1`).
 pub fn sdk_release() -> String {
     release_form(env!("CARGO_PKG_VERSION"))

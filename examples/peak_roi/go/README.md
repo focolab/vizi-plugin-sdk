@@ -93,7 +93,7 @@ points directly to a copied native executable under `bin`, with `.exe` on
 Windows. The SDK publishes the manifest last and gives each binary a
 content-addressed path, so updates do not overwrite a running Windows
 executable. Old binaries remain; stop their sessions before removing unused
-`bin` entries. Installation does not restart sessions. Rescan in vizi's Plugin
+`bin` entries. Installation does not restart sessions. Refresh vizi's Plugin
 Manager, and install only one implementation with this plugin ID at a time.
 
 The typed declaration registers the interface and handlers together. An offline

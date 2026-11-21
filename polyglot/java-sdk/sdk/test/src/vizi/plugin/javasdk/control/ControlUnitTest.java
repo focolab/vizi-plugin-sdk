@@ -90,6 +90,17 @@ class ControlUnitTest {
     assertTrue(Server.notKeepAliveNoise(other));
   }
 
+  /**
+   * grpc's Netty logs through java.util.logging, where the filter is, even with SLF4J on the
+   * classpath (the tests run with slf4j-simple, as a plugin whose libraries log with SLF4J does).
+   */
+  @Test
+  void nettyLogsWhereTheFilterIsEvenWithSlf4jPresent() {
+    assertTrue(Server.notKeepAliveNoise(new java.util.logging.LogRecord(java.util.logging.Level.INFO, "x")), "Server initialized");
+    var factory = io.grpc.netty.shaded.io.netty.util.internal.logging.InternalLoggerFactory.getDefaultFactory();
+    assertInstanceOf(io.grpc.netty.shaded.io.netty.util.internal.logging.JdkLoggerFactory.class, factory, factory.getClass().getName());
+  }
+
   @Test
   void aTimedOutRequestsLateReplyIsReportedAbandoned() throws Exception {
     List<PluginMsg> sent = new ArrayList<>();
